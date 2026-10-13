@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Banco: subir PostgreSQL",
+      "detail": "docker compose up -d db (porta 5433, bancos forecast e forecast_test)",
+      "type": "shell",
+      "command": "docker compose up -d --wait db",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "Backend: preparar banco",
+      "detail": "Instala dependências, aplica migrations e carrega dados de exemplo (idempotente)",
+      "type": "shell",
+      "command": "uv sync; if ($?) { uv run alembic upgrade head }; if ($?) { uv run python -m app.seed --exemplos }",
+      "options": {
+        "cwd": "${workspaceFolder}/backend",
+        "shell": { "executable": "pwsh", "args": ["-NoProfile", "-Command"] }
+      },
+      "dependsOn": "Banco: subir PostgreSQL",
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "Frontend: instalar dependências",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "Frontend: Vite (dev)",
+      "detail": "http://localhost:5173 com proxy /api para :8000",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "dependsOn": "Frontend: instalar dependências",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__nunca__$" },
+        "background": {
+          "activesBegin": ".",
+          "beginsPattern": "VITE",
+          "endsPattern": "Local:\\s+http"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Testes: backend (pytest)",
+      "type": "shell",
+      "command": "uv run pytest",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "dependsOn": "Banco: subir PostgreSQL",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Testes: frontend (vitest)",
+      "type": "shell",
+      "command": "npm test",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}

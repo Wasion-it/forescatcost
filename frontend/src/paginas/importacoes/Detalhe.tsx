@@ -1,0 +1,400 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { PERM, useAuth } from "../../auth/Autenticacao";
+import { AvisoErro, Cabecalho, Carregando, Dialogo, Notificacao, Status } from "../../componentes/comuns";
+import { api } from "../../lib/api";
+import { brl, data, dataHora, decimal2, mesLongo } from "../../lib/formato";
+import type { Calculo, Importacao, Previa, RegistroAuditoria } from "../../lib/tipos";
+import { FitaCalculo } from "./FitaCalculo";
+
+type Resumo = Omit<Calculo, "itens">;
+
+export function DetalheImportacao() {
+  const { id } = useParams();
+  const { pode } = useAuth();
+  const cliente = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const [versaoSelecionada, setVersaoSelecionada] = useState<string | null>(null);
+  const [calculando, setCalculando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [animar, setAnimar] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const imp = useQuery({ queryKey: ["importacao", id], queryFn: () => api.get<Importacao>(`/importacoes/${id}`) });
+  const versoes = useQuery({
+    queryKey: ["importacao", id, "versoes"],
+    queryFn: () => api.get<Resumo[]>(`/importacoes/${id}/calculos`),
+  });
+  const versao = useQuery({
+    queryKey: ["calculo", versaoSelecionada],
+    queryFn: () => api.get<Calculo>(`/importacoes/${id}/calculos/${versaoSelecionada}`),
+    enabled: Boolean(versaoSelecionada),
+  });
+
+  useEffect(() => {
+    if (params.get("calcular") === "1" && imp.data && imp.data.status !== "CANCELADO") {
+      setCalculando(true);
+      setParams({}, { replace: true });
+    }
+  }, [params, imp.data, setParams]);
+
+  function aoCalcular() {
+    setCalculando(false);
+    setVersaoSelecionada(null);
+    setAnimar(true);
+    setAviso("Cálculo registrado. A provisão já considera a nova versão.");
+    cliente.invalidateQueries({ queryKey: ["importacao", id] });
+    cliente.invalidateQueries({ queryKey: ["importacoes"] });
+  }
+
+  if (imp.isLoading) return <Carregando />;
+  if (imp.error || !imp.data) return <AvisoErro erro={imp.error} />;
+  const i = imp.data;
+  const calculoExibido = versaoSelecionada ? versao.data : i.calculo_vigente;
+  // Mês da declaração (ou data prevista); componentes com outra competência são sinalizados na fita
+  const competenciaPrincipal = calculoExibido ? `${calculoExibido.data_referencia.slice(0, 7)}-01` : "";
+  const cancelado = i.status === "CANCELADO";
+
+  return (
+    <>
+      <Cabecalho
+        titulo={
+          <span className="titulo-processo">
+            {i.numero_processo}
+            <Status status={i.status} desatualizado={i.calculo_desatualizado} />
+          </span>
+        }
+        descricao={
+          <>
+            {i.numero_declaracao ? `${i.tipo_declaracao} ${i.numero_declaracao}` : `${i.tipo_declaracao} ainda não registrada`}
+            {", "}
+            {i.tipo_importacao.nome}, {i.modal === "MARITIMO" ? "marítimo" : "aéreo"}
+          </>
+        }
+        acoes={
+          !cancelado && (
+            <>
+              {pode(PERM.importacaoEditar) && (
+                <>
+                  <button className="botao botao-perigo" onClick={() => setCancelando(true)}>
+                    Cancelar processo
+                  </button>
+                  <Link to={`/importacoes/${i.id}/editar`} className="botao">
+                    Editar
+                  </Link>
+                </>
+              )}
+              {pode(PERM.calcular) && (
+                <button className="botao botao-primario" onClick={() => setCalculando(true)}>
+                  {i.calculo_vigente ? "Recalcular" : "Calcular"}
+                </button>
+              )}
+            </>
+          )
+        }
+      />
+
+      {cancelado && (
+        <div className="aviso aviso-erro bloco">
+          <p>
+            Processo cancelado: <strong>{i.motivo_cancelamento}</strong>. Ele não entra na provisão, mas o histórico fica
+            disponível.
+          </p>
+        </div>
+      )}
+      {i.calculo_desatualizado && !cancelado && (
+        <div className="aviso aviso-atencao bloco">
+          <p>Os dados do processo mudaram depois do último cálculo. Recalcule para atualizar a provisão.</p>
+        </div>
+      )}
+
+      <div className="detalhe">
+        <section className="painel" aria-labelledby="t-fita">
+          <div className="painel-topo">
+            <div>
+              <h2 id="t-fita">Fita de cálculo</h2>
+              {calculoExibido && (
+                <p className="suave">
+                  Versão {calculoExibido.numero_versao}
+                  {!calculoExibido.vigente && " (histórica)"}, calculada em {dataHora(calculoExibido.calculado_em)} por{" "}
+                  {calculoExibido.calculado_por_nome}. Competência principal: {mesLongo(competenciaPrincipal)}.
+                </p>
+              )}
+            </div>
+            {versaoSelecionada && (
+              <button className="botao botao-pequeno" onClick={() => setVersaoSelecionada(null)}>
+                Voltar à versão vigente
+              </button>
+            )}
+          </div>
+          {calculoExibido ? (
+            <FitaCalculo calculo={calculoExibido} competenciaPrincipal={competenciaPrincipal} animar={animar && !versaoSelecionada} />
+          ) : versaoSelecionada ? (
+            <Carregando />
+          ) : (
+            <div className="vazio">
+              <p>Este processo ainda não foi calculado.</p>
+              {pode(PERM.calcular) && !cancelado && (
+                <button className="botao botao-primario" onClick={() => setCalculando(true)}>
+                  Calcular agora
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+
+        <aside className="detalhe-lateral">
+          <section className="painel" aria-labelledby="t-dados">
+            <div className="painel-topo">
+              <h2 id="t-dados">Dados do processo</h2>
+            </div>
+            <dl className="manifesto">
+              <Dado rotulo="Data de registro" valor={data(i.data_declaracao)} />
+              <Dado rotulo="Data prevista" valor={data(i.data_prevista)} />
+              <Dado rotulo="Invoice" valor={`${i.moeda_invoice} ${decimal2(i.valor_invoice)}`} />
+              <Dado rotulo="Frete internacional" valor={`${i.moeda_frete} ${decimal2(i.valor_frete)}`} />
+              <Dado rotulo="Taxa USD" valor={i.taxa_usd ? Number(i.taxa_usd).toLocaleString("pt-BR", { maximumFractionDigits: 6 }) : "–"} />
+              <Dado rotulo="Taxa CNY" valor={i.taxa_cny ? Number(i.taxa_cny).toLocaleString("pt-BR", { maximumFractionDigits: 6 }) : "–"} />
+              <Dado rotulo="Siscomex" valor={brl(i.valor_siscomex)} />
+              <Dado rotulo="Itens / containers" valor={`${i.qtd_itens} / ${i.qtd_containers}`} />
+              <Dado rotulo="Peso bruto / líquido" valor={`${Number(i.peso_bruto_kg).toLocaleString("pt-BR")} / ${Number(i.peso_liquido_kg).toLocaleString("pt-BR")} kg`} />
+              <Dado rotulo="Transportadora local" valor={i.transportadora_local?.nome ?? "Valores padrão"} />
+              <Dado rotulo="Transportadora secundária" valor={i.transportadora_secundaria?.nome ?? "Valores padrão"} />
+              <Dado rotulo="Despachante" valor={i.despachante?.nome ?? "–"} />
+              <Dado rotulo="Terminal" valor={i.terminal?.nome ?? "Valores padrão"} />
+            </dl>
+            {i.observacoes && <p className="observacoes">{i.observacoes}</p>}
+          </section>
+
+          <section className="painel" aria-labelledby="t-versoes">
+            <div className="painel-topo">
+              <h2 id="t-versoes">Versões do cálculo</h2>
+            </div>
+            {versoes.data?.length ? (
+              <ol className="versoes">
+                {versoes.data.map((v) => {
+                  const ativa = versaoSelecionada ? v.id === versaoSelecionada : v.vigente;
+                  return (
+                    <li key={v.id}>
+                      <button
+                        className="versao"
+                        aria-current={ativa ? "true" : undefined}
+                        onClick={() => {
+                          setAnimar(false);
+                          setVersaoSelecionada(v.vigente ? null : v.id);
+                        }}
+                      >
+                        <span className="versao-topo">
+                          <strong>v{v.numero_versao}</strong>
+                          <span className="num">{brl(v.total_provisionado)}</span>
+                        </span>
+                        <span className="suave">
+                          {dataHora(v.calculado_em)}, {v.calculado_por_nome}
+                          {v.vigente && ", vigente"}
+                        </span>
+                        <span>{v.motivo}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="painel-corpo suave">Nenhuma versão registrada.</p>
+            )}
+          </section>
+
+          {pode(PERM.auditoriaLer) && <HistoricoAlteracoes id={i.id} />}
+        </aside>
+      </div>
+
+      {calculando && <DialogoCalculo importacao={i} aoFechar={() => setCalculando(false)} aoConcluir={aoCalcular} />}
+      {cancelando && (
+        <DialogoCancelamento
+          importacao={i}
+          aoFechar={() => setCancelando(false)}
+          aoConcluir={() => {
+            setCancelando(false);
+            setAviso("Processo cancelado e retirado da provisão.");
+            cliente.invalidateQueries({ queryKey: ["importacao", id] });
+            cliente.invalidateQueries({ queryKey: ["importacoes"] });
+          }}
+        />
+      )}
+      <Notificacao texto={aviso} aoSumir={() => setAviso(null)} />
+    </>
+  );
+}
+
+function Dado({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div>
+      <dt>{rotulo}</dt>
+      <dd>{valor}</dd>
+    </div>
+  );
+}
+
+function DialogoCalculo({ importacao, aoFechar, aoConcluir }: { importacao: Importacao; aoFechar: () => void; aoConcluir: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const previa = useQuery({
+    queryKey: ["previa", importacao.id, importacao.versao],
+    queryFn: () => api.post<Previa>(`/importacoes/${importacao.id}/calculos/previa`),
+    gcTime: 0,
+    retry: false,
+  });
+  const registrar = useMutation({
+    mutationFn: () => api.post<Calculo>(`/importacoes/${importacao.id}/calculos`, { motivo: motivo || null }),
+    onSuccess: aoConcluir,
+  });
+  const exigeMotivo = previa.data?.exige_motivo ?? false;
+  const alterados = previa.data
+    ? previa.data.itens.filter((it) => it.compoe_provisao && Number(previa.data!.diferencas[it.componente_codigo]?.diferenca ?? 0) !== 0)
+    : [];
+
+  return (
+    <Dialogo
+      aberto
+      titulo={exigeMotivo ? "Recalcular processo" : "Calcular processo"}
+      aoFechar={aoFechar}
+      rodape={
+        <>
+          <button className="botao botao-texto" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button
+            className="botao botao-primario"
+            disabled={!previa.data || registrar.isPending || (exigeMotivo && motivo.trim().length < 5)}
+            onClick={() => registrar.mutate()}
+          >
+            {registrar.isPending ? "Registrando…" : "Registrar cálculo"}
+          </button>
+        </>
+      }
+    >
+      {previa.isLoading && <Carregando texto="Calculando com os parâmetros vigentes…" />}
+      <AvisoErro erro={previa.error} titulo="Não foi possível calcular" />
+      {previa.data && (
+        <>
+          <div className="comparacao">
+            <div>
+              <span className="suave">Versão atual</span>
+              <strong className="num">{brl(previa.data.total_anterior)}</strong>
+            </div>
+            <div>
+              <span className="suave">Novo cálculo</span>
+              <strong className="num valor-provisionado">{brl(previa.data.total_provisionado)}</strong>
+            </div>
+          </div>
+          {exigeMotivo && (
+            <>
+              {alterados.length > 0 ? (
+                <table className="tabela tabela-compacta">
+                  <caption className="sr-only">Componentes que mudam</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Componente</th>
+                      <th scope="col" className="num">
+                        Diferença
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {alterados.map((it) => {
+                      const d = Number(previa.data!.diferencas[it.componente_codigo].diferenca);
+                      return (
+                        <tr key={it.componente_codigo}>
+                          <td>{it.componente_nome}</td>
+                          <td className="num">
+                            {d > 0 ? "+" : ""}
+                            {brl(d)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="suave">Nenhum componente muda em relação à versão atual.</p>
+              )}
+              <div className="campo">
+                <label htmlFor="motivo">Motivo do recálculo</label>
+                <input id="motivo" className="entrada" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: atualização da PTAX" maxLength={300} />
+                <span className="ajuda">Fica registrado no histórico de versões.</span>
+              </div>
+            </>
+          )}
+        </>
+      )}
+      <AvisoErro erro={registrar.error} />
+    </Dialogo>
+  );
+}
+
+function DialogoCancelamento({ importacao, aoFechar, aoConcluir }: { importacao: Importacao; aoFechar: () => void; aoConcluir: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const cancelar = useMutation({
+    mutationFn: () => api.post(`/importacoes/${importacao.id}/cancelar`, { motivo }),
+    onSuccess: aoConcluir,
+  });
+  return (
+    <Dialogo
+      aberto
+      titulo={`Cancelar ${importacao.numero_processo}`}
+      aoFechar={aoFechar}
+      rodape={
+        <>
+          <button className="botao botao-texto" onClick={aoFechar}>
+            Manter processo
+          </button>
+          <button className="botao botao-perigo" disabled={motivo.trim().length < 5 || cancelar.isPending} onClick={() => cancelar.mutate()}>
+            Cancelar processo
+          </button>
+        </>
+      }
+    >
+      <p>O processo sai da provisão e não poderá mais ser editado ou calculado. O histórico continua disponível.</p>
+      <div className="campo">
+        <label htmlFor="motivo-cancelamento">Motivo</label>
+        <input id="motivo-cancelamento" className="entrada" value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={300} />
+      </div>
+      <AvisoErro erro={cancelar.error} />
+    </Dialogo>
+  );
+}
+
+const ROTULOS_CAMPOS: Record<string, string> = {
+  taxa_usd: "taxa USD", taxa_cny: "taxa CNY", valor_invoice: "invoice", valor_frete: "frete",
+  qtd_itens: "itens", qtd_containers: "containers", observacoes: "observações", status: "situação",
+  calculo_desatualizado: "indicador de recálculo", numero_declaracao: "número da declaração",
+  data_declaracao: "data de registro", data_prevista: "data prevista", motivo_cancelamento: "motivo do cancelamento",
+};
+
+function HistoricoAlteracoes({ id }: { id: string }) {
+  const r = useQuery({
+    queryKey: ["auditoria", "importacao", id],
+    queryFn: () => api.get<{ itens: RegistroAuditoria[] }>(`/auditoria?tabela=importacao&registro_id=${id}&tamanho=20`),
+  });
+  if (!r.data?.itens.length) return null;
+  return (
+    <section className="painel" aria-labelledby="t-alteracoes">
+      <div className="painel-topo">
+        <h2 id="t-alteracoes">Alterações</h2>
+      </div>
+      <ol className="linha-tempo">
+        {r.data.itens.map((a) => (
+          <li key={a.id}>
+            <span className="suave">
+              {dataHora(a.ocorrido_em)}, {a.usuario_nome}
+            </span>
+            <span>
+              {a.acao === "INSERT"
+                ? "Cadastrou o processo"
+                : `Alterou ${(a.campos_alterados ?? []).map((c) => ROTULOS_CAMPOS[c] ?? c.replace(/_/g, " ")).join(", ")}`}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}

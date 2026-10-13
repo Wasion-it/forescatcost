@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.log
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# IDE / SO (launch e tasks são compartilhados com o time)
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea/
+Thumbs.db
+.DS_Store

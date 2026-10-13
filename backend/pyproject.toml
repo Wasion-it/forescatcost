@@ -1,0 +1,42 @@
+[project]
+name = "forecast-backend"
+version = "0.1.0"
+description = "API do Forecast de Importação (previsão de custos e impostos)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic==1.20.0",
+    "bcrypt==5.0.0",
+    "fastapi==0.143.0",
+    "psycopg[binary]==3.3.6",
+    "pydantic-settings==2.15.0",
+    "pyjwt==2.15.1",
+    "python-dateutil==2.9.0.post0",
+    "sqlalchemy==2.1.4",
+    "uvicorn[standard]==0.54.0",
+    "xlsxwriter==3.2.9",
+]
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "openpyxl==3.1.5",
+    "pytest==9.1.1",
+    "ruff==0.17.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]
+"app/seed.py" = ["S105", "S106", "E501"]  # tabelas de dados de carga

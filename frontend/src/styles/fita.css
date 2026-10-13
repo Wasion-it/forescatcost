@@ -1,0 +1,202 @@
+/* Fita de cálculo: a cascata do CIF ao total. Único elemento com ênfase visual forte. */
+
+.fita {
+  --cor-barra: var(--solimoes);
+}
+
+.fita-base {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-5);
+  background: var(--negro);
+  color: #d5dedd;
+  border-radius: var(--r-painel) var(--r-painel) 0 0;
+}
+
+.fita-base strong {
+  display: block;
+  color: var(--papel);
+  font-family: var(--fonte-estreita);
+  font-size: var(--t-xl);
+  font-weight: 500;
+}
+
+.fita-base-rotulo {
+  display: block;
+  font-size: var(--t-xs);
+  color: #9fb0ae;
+}
+
+.fita-base code {
+  color: #9fb0ae;
+}
+
+.fita-base-valor {
+  font-family: var(--fonte-estreita);
+  font-size: var(--t-2xl);
+  font-weight: 500;
+  color: var(--papel);
+}
+
+.fita-grupo {
+  padding: var(--e-2) 0;
+  border-bottom: 1px solid var(--linha-fraca);
+}
+
+.fita-grupo-topo {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--e-2) var(--e-5) var(--e-1);
+}
+
+.fita-grupo-topo h3 {
+  font-family: var(--fonte-estreita);
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--tinta-suave);
+}
+
+.fita-grupo-topo .num {
+  font-size: var(--t-sm);
+  color: var(--tinta-suave);
+}
+
+.fita-linha summary {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(120px, 2fr) minmax(110px, auto);
+  align-items: center;
+  gap: var(--e-4);
+  padding: 7px var(--e-5);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fita-linha summary::-webkit-details-marker {
+  display: none;
+}
+
+.fita-linha summary:hover,
+.fita-linha[open] summary {
+  background: #f7f6f0;
+}
+
+.fita-nome {
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+}
+
+.fita-competencia {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--solimoes-escuro);
+}
+
+/* Trilha horizontal: a barra começa no acumulado anterior e ocupa a parcela do componente */
+.fita-trilha {
+  position: relative;
+  height: 14px;
+  background: linear-gradient(var(--linha-fraca), var(--linha-fraca)) center / 100% 1px no-repeat;
+  border-radius: 2px;
+}
+
+.fita-barra {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--inicio);
+  width: max(var(--largura), 2px);
+  background: var(--cor-barra);
+  border-radius: 2px;
+}
+
+.fita-valor {
+  font-weight: 500;
+}
+
+.fita-zero {
+  color: var(--tinta-fraca);
+  font-weight: 400;
+}
+
+.fita-memoria {
+  padding: var(--e-2) var(--e-5) var(--e-4) var(--e-5);
+  background: #f7f6f0;
+  border-top: 1px dashed var(--linha);
+}
+
+.fita-memoria dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--e-2) var(--e-5);
+  margin: var(--e-3) 0 0;
+}
+
+.fita-memoria dt {
+  font-size: var(--t-xs);
+  color: var(--tinta-suave);
+  text-transform: none;
+}
+
+.fita-memoria dt::first-letter {
+  text-transform: uppercase;
+}
+
+.fita-memoria dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fita-memoria dd .suave {
+  font-size: var(--t-xs);
+}
+
+.fita-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--e-4) var(--e-5) var(--e-5);
+}
+
+.fita-total span {
+  font-family: var(--fonte-estreita);
+  font-size: var(--t-xl);
+  color: var(--negro);
+}
+
+.fita-total strong {
+  font-family: var(--fonte-estreita);
+  font-size: var(--t-3xl);
+  font-weight: 600;
+  color: var(--solimoes-escuro);
+  line-height: 1;
+}
+
+/* Momento único de movimento: depois de calcular, as parcelas entram em sequência */
+@keyframes fita-entrar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.fita-animada .fita-barra {
+  transform-origin: left center;
+  animation: fita-entrar 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 70ms);
+}
+
+@media (max-width: 700px) {
+  .fita-linha summary {
+    grid-template-columns: 1fr auto;
+  }
+  .fita-trilha {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

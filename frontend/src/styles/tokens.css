@@ -1,0 +1,58 @@
+/*
+  Forecast de Importação: tokens visuais
+  Conceito "Encontro das Águas": o Rio Negro (escuro) emoldura e orienta;
+  o Solimões (ocre-areia) marca apenas o dinheiro provisionado.
+*/
+:root {
+  /* Cores base */
+  --negro: #1c2b2d;
+  --negro-2: #26393c;
+  --negro-3: #3a5154;
+  --solimoes: #c4975a;
+  --solimoes-claro: #ead9bf;
+  --solimoes-escuro: #8a6631;
+  --varzea: #eef0ea;
+  --papel: #ffffff;
+  --agua: #3d6f78;
+  --agua-claro: #dce8ea;
+  --folha: #2e6a4f;
+  --folha-claro: #deece4;
+  --urucum: #b23a2e;
+  --urucum-claro: #f6e1de;
+
+  /* Texto e linhas */
+  --tinta: #243235;
+  --tinta-suave: #56676a;
+  --tinta-fraca: #6f7f81;
+  --linha: #cdd3cc;
+  --linha-fraca: #e1e5df;
+
+  /* Tipografia */
+  --fonte: "Barlow", system-ui, sans-serif;
+  --fonte-estreita: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --fonte-codigo: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --t-xs: 0.75rem;   /* 12 */
+  --t-sm: 0.8125rem; /* 13 */
+  --t-md: 0.875rem;  /* 14 */
+  --t-lg: 1rem;      /* 16 */
+  --t-xl: 1.25rem;   /* 20 */
+  --t-2xl: 1.75rem;  /* 28 */
+  --t-3xl: 2.5rem;   /* 40 */
+
+  /* Espaço */
+  --e-1: 4px;
+  --e-2: 8px;
+  --e-3: 12px;
+  --e-4: 16px;
+  --e-5: 24px;
+  --e-6: 32px;
+  --e-7: 48px;
+
+  /* Raios por hierarquia */
+  --r-controle: 3px;
+  --r-painel: 6px;
+  --r-dialogo: 8px;
+
+  --trilho: 232px;
+  --foco: 0 0 0 2px var(--papel), 0 0 0 4px var(--agua);
+}
