@@ -113,7 +113,7 @@ class Transportadora(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     nome: Mapped[str] = mapped_column(String(120))
     cnpj: Mapped[str | None] = mapped_column(String(18))
-    tipo_servico: Mapped[str] = mapped_column(String(20))  # LOCAL | SECUNDARIO | AMBOS
+    tipo_servico: Mapped[str] = mapped_column(String(20))  # LOCAL
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = _criado_em()
 
@@ -144,9 +144,10 @@ class Parametro(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     chave: Mapped[str] = mapped_column(String(60), unique=True)
     descricao: Mapped[str] = mapped_column(String(200))
-    tipo_valor: Mapped[str] = mapped_column(String(20))  # MONETARIO | PERCENTUAL | INTEIRO
+    # MONETARIO | PERCENTUAL | INTEIRO | BOOLEANO
+    tipo_valor: Mapped[str] = mapped_column(String(20))
     escopo: Mapped[str] = mapped_column(String(30))
-    # GLOBAL | TIPO_IMPORTACAO | TRANSP_LOCAL | TRANSP_SECUNDARIA | DESPACHANTE | TERMINAL
+    # GLOBAL | TIPO_IMPORTACAO | TRANSP_LOCAL | DESPACHANTE | TERMINAL
     grupo: Mapped[str] = mapped_column(String(40))
     valores: Mapped[list[ParametroValor]] = relationship(
         back_populates="parametro", order_by="ParametroValor.vigencia_inicio.desc()"
@@ -250,13 +251,11 @@ class Importacao(Base):
     taxa_usd: Mapped[Decimal | None] = mapped_column(Taxa)
     taxa_cny: Mapped[Decimal | None] = mapped_column(Taxa)
     valor_siscomex: Mapped[Decimal] = mapped_column(Dinheiro)
+    valor_taxa_liberacao: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal(0))
     peso_bruto_kg: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     peso_liquido_kg: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     valor_armazenagem_aerea: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal(0))
     transportadora_local_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("transportadora.id")
-    )
-    transportadora_secundaria_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("transportadora.id")
     )
     despachante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("despachante.id"))
@@ -275,9 +274,6 @@ class Importacao(Base):
     tipo_importacao: Mapped[TipoImportacao] = relationship(lazy="joined")
     transportadora_local: Mapped[Transportadora | None] = relationship(
         foreign_keys=[transportadora_local_id], lazy="joined"
-    )
-    transportadora_secundaria: Mapped[Transportadora | None] = relationship(
-        foreign_keys=[transportadora_secundaria_id], lazy="joined"
     )
     despachante: Mapped[Despachante | None] = relationship(lazy="joined")
     terminal: Mapped[Terminal | None] = relationship(lazy="joined")

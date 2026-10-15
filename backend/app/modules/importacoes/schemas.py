@@ -33,11 +33,11 @@ class ImportacaoEntrada(BaseModel):
     taxa_usd: TaxaCambio | None = None
     taxa_cny: TaxaCambio | None = None
     valor_siscomex: Dinheiro = Decimal(0)
+    valor_taxa_liberacao: Dinheiro = Decimal(0)
     peso_bruto_kg: Peso = Decimal(0)
     peso_liquido_kg: Peso = Decimal(0)
     valor_armazenagem_aerea: Dinheiro = Decimal(0)
     transportadora_local_id: UUID | None = None
-    transportadora_secundaria_id: UUID | None = None
     despachante_id: UUID | None = None
     terminal_id: UUID | None = None
     observacoes: str | None = Field(default=None, max_length=2000)
@@ -176,7 +176,6 @@ class ImportacaoDetalhe(ImportacaoEntrada):
     atualizado_em: datetime
     tipo_importacao: TipoRef
     transportadora_local: RefNome | None
-    transportadora_secundaria: RefNome | None
     despachante: RefNome | None
     terminal: RefNome | None
     calculo_vigente: CalculoSaida | None = None

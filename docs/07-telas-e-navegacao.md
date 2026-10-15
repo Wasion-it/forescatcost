@@ -116,7 +116,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 │ PIS                     │ 213.975,03   │ x,xx%       │   x.xxx,xx │ 10/26 │
 │ ...                     │              │             │            │       │
 │ TCIF                    │ 12 itens     │ 45 + 245    │     785,00 │ 11/26 │
-│ Transporte secundário   │ 2 cont.      │ 1.000+0,01% │   2.021,40 │ 10/26 │
+│ Transporte local        │ 2 cont.      │ 1.500+0,06% │   3.128,39 │ 10/26 │
 │ Despachante             │ 1 DI         │ Industr.    │     715,00 │ 10/26 │
 ├─────────────────────────┴──────────────┴─────────────┴────────────┴───────┤
 │ Total provisionado: R$ 98.430,12   Versão 3 · 17/10/26 14:02 · j.silva    │
@@ -130,7 +130,7 @@ Ao clicar em um componente, abre o painel lateral com a fórmula, as variáveis,
 │ Variáveis                  │ Componente        │ Vigente  │ Cenário │ Δ   │
 │ Taxa USD [5,4210] → [5,90] │ CIF               │ 213.975  │ 216.274 │ +1% │
 │ Taxa CNY [0,7512] → [0,75] │ ICMS              │  …       │  …      │ …   │
-│ Containers [2] → [3]       │ Transp. secundário│ 2.021    │ 3.021   │ +49%│
+│ Containers [2] → [3]       │ Transp. local     │ 3.128    │ 4.628   │ +48%│
 │ Alíq. ICMS [..] → [..]     │ TOTAL             │ 98.430   │ 101.9xx │+3,5%│
 │ [Restaurar] [Salvar cenário] [Exportar] [Promover ao processo]            │
 └───────────────────────────────────────────────────────────────────────────┘

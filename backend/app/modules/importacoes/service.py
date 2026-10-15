@@ -27,7 +27,6 @@ def _validar_referencias(db: Session, dados: ImportacaoEntrada) -> None:
     checagens = [
         (TipoImportacao, dados.tipo_importacao_id, "Tipo de importação"),
         (Transportadora, dados.transportadora_local_id, "Transportadora local"),
-        (Transportadora, dados.transportadora_secundaria_id, "Transportadora secundária"),
         (Despachante, dados.despachante_id, "Despachante"),
         (Terminal, dados.terminal_id, "Terminal"),
     ]

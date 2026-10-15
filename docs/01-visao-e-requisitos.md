@@ -74,7 +74,8 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | DI / DUIMP | Declaração de Importação / Declaração Única de Importação (Novo Processo de Importação, que está substituindo a DI) |
 | CIF | Cost, Insurance and Freight. Aqui é a base de cálculo configurável (inicialmente Invoice + Frete + Siscomex) |
 | TCIF | Taxa de Controle de Incentivos Fiscais (SUFRAMA) |
-| AFRMM | Adicional ao Frete para Renovação da Marinha Mercante |
+| Taxa de liberação | Despesa de liberação da carga, informada em cada processo (varia por agente e por processo). Aparece separada do frete internacional |
+| Suspensão (II/IPI) | Condição em que o Imposto de Importação ou o IPI não é pago. Controlada por parâmetro e, por padrão, vale para todos os tipos |
 | Competência | Mês em que o valor entra na provisão financeira |
 | Parâmetro com vigência | Valor válido de uma data inicial até uma data final, sem sobrescrever o histórico |
 | Memória de cálculo | Registro de fórmula, variáveis e resultado de cada componente |
@@ -85,16 +86,15 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 |----|-------|
 | RN01 | Conversão cambial: valor em BRL = valor na moeda × taxa informada no processo (Taxa USD, Taxa CNY). BRL tem taxa 1. Toda moeda usada no processo exige taxa. |
 | RN02 | CIF = Invoice (BRL) + Frete (BRL) + Siscomex. A fórmula é configurável e versionada. |
-| RN03 | Alíquotas (II, IPI, PIS, COFINS, ICMS, AFRMM e outros) vêm de tabela parametrizada por tipo de importação, com origem "manual" ou "TecWin". Podem ser sobrescritas no processo, com justificativa obrigatória. |
+| RN03 | Alíquotas (II, IPI, PIS, COFINS, ICMS e outros) vêm de tabela parametrizada por tipo de importação, com origem "manual" ou "TecWin". Podem ser sobrescritas no processo, com justificativa obrigatória. |
 | RN04 | A ordem e a base de cálculo dos impostos seguem o pipeline definido no doc 04 e devem ser validadas pelo Fiscal antes do go-live. |
 | RN05 | TCIF = R$ 45,00 × quantidade de itens + R$ 245,00 por DI. |
 | RN06 | Competência: se o dia da DI for maior que 15, o valor é provisionado no mês seguinte; senão, no mês da DI. O dia de corte é parametrizável e a regra é configurável por componente (hoje aplica-se à TCIF). |
 | RN07 | Transporte local = valor por container × qtd. containers + 0,06% × valor da carga. Valores por transportadora, parametrizáveis. |
-| RN08 | Transporte secundário = R$ 1.000,00 × qtd. containers + 0,01% × valor da carga. Parametrizável. |
 | RN09 | Armazenagem marítima, 1º período = 0,92% × CIF. Períodos adicionais e valor mínimo são parametrizáveis por terminal (ex.: Chibatão). |
 | RN10 | Armazenagem aérea usa CIF, peso bruto e peso líquido. Fórmula pendente. Até a definição, permitir valor informado manualmente com justificativa. |
-| RN11 | Despachante: R$ 715,00 por DI (Industrialização) e R$ 900,00 por DI (Uso e Consumo). Parametrizável por despachante e tipo. |
-| RN12 | Frete internacional (componente de desembolso) = Frete (BRL) + Taxa de Liberação. |
+| RN11 | Despachante: R$ 715,00 por DI (Industrialização) e R$ 900,00 por DI (Uso e Consumo e Adicionar Ativo). Parametrizável por despachante e tipo. |
+| RN12 | Frete internacional (componente de desembolso) = Frete (BRL). A Taxa de liberação é outro componente, com o valor informado em cada processo (campo alor_taxa_liberacao), pois varia por processo. |
 | RN13 | Cada cálculo gera uma versão imutável. Só uma versão é a vigente por processo. Versões anteriores ficam no histórico. |
 | RN14 | O cálculo usa os parâmetros vigentes na data de referência e grava um snapshot deles. Recalcular um processo antigo não muda a versão anterior. |
 | RN15 | Simulações não alteram a versão vigente nem a provisão. |
@@ -102,6 +102,8 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN17 | Competência fechada pelo Financeiro bloqueia alterações que afetem aquele mês. Reabertura só por perfil autorizado, com motivo e auditoria. |
 | RN18 | Valores monetários usam aritmética decimal (nunca ponto flutuante). Cada componente é arredondado em 2 casas, meia para cima. A regra deve ser confirmada contra as planilhas atuais. |
 | RN19 | O número da DI/DUIMP é único quando informado e validado por máscara conforme o tipo de declaração. |
+| RN21 | II e IPI são suspensos (não pagos) por padrão, controlados pelos parâmetros ii_suspenso e ipi_suspenso (1 = suspenso, 0 = cobra), com exceção possível por tipo de importação e vigência. Suspenso, o valor é 0,00 e o ICMS não os inclui na base. A memória de cálculo marca o item como suspenso. |
+| RN22 | A Taxa Siscomex é um componente do grupo de impostos e compõe a provisão. O valor também já está no CIF (base), então o ICMS não soma o Siscomex de novo. |
 | RN20 | Cada componente indica se compõe o total de desembolso provisionado. Bases de cálculo, como o CIF, não somam no total, para evitar dupla contagem (o frete, por exemplo, entra no CIF e também no componente Frete Internacional). |
 
 ## 5. Requisitos funcionais
@@ -175,5 +177,5 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 10. Alíquotas por NCM: hoje há uma alíquota por processo? Com itens de NCMs diferentes, será necessário modelar adições/itens (previsto no modelo como opcional).
 11. DUIMP: quais operações já usam DUIMP? O sistema deve aceitar os dois formatos.
 12. Reforma Tributária (CBS/IBS): definir com o Fiscal como e quando provisionar os novos tributos (o sistema já suporta novos impostos parametrizáveis).
-13. Taxa de liberação: valor fixo por agente/armador ou por processo?
+13. Taxa de liberação: resolvida. O valor é variável e informado em cada processo.
 14. Data de referência dos parâmetros: data do cálculo, data da DI ou data prevista de chegada?

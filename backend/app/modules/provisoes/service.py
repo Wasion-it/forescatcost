@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.erros import ErroNegocio
-from app.models import Calculo, CalculoItem, Importacao, TipoImportacao
+from app.models import Calculo, CalculoItem, ComponenteCusto, Importacao, TipoImportacao
 
 MAX_MESES = 24
 ZERO = Decimal(0)
@@ -68,10 +68,12 @@ def buscar_linhas(db: Session, de: date, ate: date, tipo: str | None = None) -> 
             TipoImportacao.nome,
         )
         .join(Calculo, Calculo.id == CalculoItem.calculo_id)
+        .join(ComponenteCusto, ComponenteCusto.id == CalculoItem.componente_id)
         .join(Importacao, Importacao.id == Calculo.importacao_id)
         .join(TipoImportacao, TipoImportacao.id == Importacao.tipo_importacao_id)
         .where(
             Calculo.vigente.is_(True),
+            ComponenteCusto.ativo.is_(True),
             Importacao.status != "CANCELADO",
             CalculoItem.compoe_provisao.is_(True),
             CalculoItem.competencia >= de.replace(day=1),

@@ -52,6 +52,7 @@ def entradas_de(imp: Importacao) -> Entradas:
         peso_bruto=imp.peso_bruto_kg,
         peso_liquido=imp.peso_liquido_kg,
         valor_armazenagem_aerea=imp.valor_armazenagem_aerea,
+        valor_taxa_liberacao=imp.valor_taxa_liberacao,
     )
 
 
@@ -91,12 +92,18 @@ def _memoria(item, execucao: Execucao) -> dict:
             origens[var] = f"{rotulo}, vigente desde {p.vigencia_inicio.isoformat()}"
         elif var.startswith("aliq."):
             origens[var] = "tabela de alíquotas"
-    return {
+    memoria = {
         "expressao": item.expressao,
         "formula_versao": item.formula_versao,
         "variaveis": item.variaveis,
         "origens": origens,
     }
+    if any(
+        var.startswith("p.") and var.endswith("_suspenso") and Decimal(valor) != 0
+        for var, valor in item.variaveis.items()
+    ):
+        memoria["suspenso"] = True
+    return memoria
 
 
 def itens_saida(execucao: Execucao) -> list[dict]:
@@ -153,7 +160,7 @@ def _snapshot_entradas(imp: Importacao, execucao: Execucao) -> dict:
         "tipo_declaracao", "numero_declaracao", "data_declaracao", "data_prevista", "modal",
         "valor_invoice", "moeda_invoice", "valor_frete", "moeda_frete", "qtd_itens",
         "qtd_containers", "taxa_usd", "taxa_cny", "valor_siscomex", "peso_bruto_kg",
-        "peso_liquido_kg", "valor_armazenagem_aerea",
+        "peso_liquido_kg", "valor_armazenagem_aerea", "valor_taxa_liberacao",
     ]  # fmt: skip
     dados = {c: getattr(imp, c) for c in campos}
     dados["tipo_importacao"] = imp.tipo_importacao.codigo

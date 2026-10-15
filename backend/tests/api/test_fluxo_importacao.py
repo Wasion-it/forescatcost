@@ -28,10 +28,10 @@ def payload(refs):
         "qtd_containers": 2,
         "taxa_usd": "5.000000",
         "valor_siscomex": "154.23",
+        "valor_taxa_liberacao": "350.00",
         "peso_bruto_kg": "12000",
         "peso_liquido_kg": "11000",
         "transportadora_local_id": refs["transp"]["Rodo Norte Logística"],
-        "transportadora_secundaria_id": refs["transp"]["Via Rio Negro Cargas"],
         "despachante_id": refs["despachante"],
         "terminal_id": refs["term"]["Chibatão"],
     }
@@ -66,12 +66,20 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     itens = {i["componente_codigo"]: i for i in calc["itens"]}
     # Mesmos valores do caso de referência do motor, com ICMS de 20% (alíquota de exemplo)
     assert itens["CIF"]["valor"] == "60154.23"
-    assert itens["II"]["valor"] == "8421.59"
+    assert itens["II"]["valor"] == "0.00"  # suspenso
+    assert itens["IPI"]["valor"] == "0.00"  # suspenso
+    assert itens["II"]["memoria"]["suspenso"] is True
+    assert itens["TAXA_SISCOMEX"]["valor"] == "154.23"
+    assert itens["TAXA_SISCOMEX"]["natureza"] == "IMPOSTO"
+    assert itens["TAXA_SISCOMEX"]["compoe_provisao"] is True
+    assert itens["FRETE_INTL"]["valor"] == "10000.00"
+    assert itens["TAXA_LIBERACAO"]["valor"] == "350.00"
     assert itens["DESPACHANTE"]["valor"] == "900.00"  # Uso e Consumo
-    assert itens["TRANSP_SEC"]["valor"] == "2006.02"
+    assert "TRANSP_SEC" not in itens and "AFRMM" not in itens
     assert itens["TCIF"]["valor"] == "695.00"
     assert itens["TCIF"]["competencia"] == "2026-11-01"  # DI no dia 16
     assert itens["II"]["competencia"] == "2026-10-01"
+    assert "suspenso" not in itens["PIS"]["memoria"]
     assert itens["CIF"]["compoe_provisao"] is False
     assert "origens" in itens["DESPACHANTE"]["memoria"]
     assert len(calc["hash_integridade"]) == 64
@@ -79,6 +87,42 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     detalhe = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
     assert detalhe["status"] == "CALCULADO"
     assert detalhe["calculo_vigente"]["numero_versao"] == 1
+
+
+def test_adicionar_ativo_cobra_honorario_de_900(client, pcm, refs, payload):
+    dados = {**payload, "tipo_importacao_id": refs["tipos"]["ADICIONAR_ATIVO"]}
+    imp = _criar(client, pcm, dados)
+    r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
+    assert r.status_code == 201, r.text
+    itens = {i["componente_codigo"]: i for i in r.json()["itens"]}
+    assert itens["DESPACHANTE"]["valor"] == "900.00"
+    assert itens["II"]["valor"] == "0.00"
+    assert itens["PIS"]["valor"] == "1263.24"  # alíquotas copiadas de Uso e Consumo
+
+
+def test_taxa_de_liberacao_varia_por_processo(client, pcm, payload):
+    totais = {}
+    for taxa in ("280.00", "510.00"):
+        dados = {
+            **payload,
+            "numero_declaracao": f"26/{next(_seq):07d}-0",
+            "valor_taxa_liberacao": taxa,
+        }
+        imp = _criar(client, pcm, dados)
+        assert imp["valor_taxa_liberacao"] == taxa
+        r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
+        assert r.status_code == 201, r.text
+        itens = {i["componente_codigo"]: i["valor"] for i in r.json()["itens"]}
+        assert itens["TAXA_LIBERACAO"] == taxa
+        assert itens["FRETE_INTL"] == "10000.00"
+        totais[taxa] = Decimal(r.json()["total_provisionado"])
+    assert totais["510.00"] - totais["280.00"] == Decimal("230.00")
+
+
+def test_componentes_inativos_nao_aparecem(client, pcm):
+    codigos = {c["codigo"] for c in client.get("/api/v1/componentes", headers=pcm).json()}
+    assert not {"AFRMM", "TRANSP_SEC"} & codigos
+    assert {"TAXA_SISCOMEX", "TAXA_LIBERACAO", "FRETE_INTL"} <= codigos
 
 
 def test_recalculo_versiona_e_exige_motivo(client, pcm, payload):
@@ -98,6 +142,8 @@ def test_recalculo_versiona_e_exige_motivo(client, pcm, payload):
     previa = client.post(f"/api/v1/importacoes/{imp['id']}/calculos/previa", headers=pcm).json()
     assert previa["exige_motivo"] is True
     assert Decimal(previa["diferencas"]["CIF"]["diferenca"]) == Decimal("6000.00")
+    assert Decimal(previa["diferencas"]["FRETE_INTL"]["diferenca"]) == Decimal("1000.00")
+    assert Decimal(previa["diferencas"]["TAXA_LIBERACAO"]["diferenca"]) == Decimal("0.00")
 
     r = client.post(
         f"/api/v1/importacoes/{imp['id']}/calculos",

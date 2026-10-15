@@ -14,16 +14,16 @@ flowchart TD
     CIF --> PIS[PIS]
     CIF --> COFINS[COFINS]
     II --> IPI[IPI]
-    CONV --> AFRMM[AFRMM<br/>modal marítimo]
-    CIF & II & IPI & PIS & COFINS & AFRMM --> ICMS[ICMS por dentro]
+    E --> SISC[Taxa Siscomex]
+    CIF & II & IPI & PIS & COFINS --> ICMS[ICMS por dentro]
     E --> TCIF[TCIF]
     CIF --> TL[Transporte local]
-    CIF --> TS[Transporte secundário]
     CIF --> AM[Armazenagem marítima]
     CIF --> AA[Armazenagem aérea]
     E --> DESP[Despachante]
-    CONV --> FI[Frete internacional + liberação]
-    ICMS & TCIF & TL & TS & AM & AA & DESP & FI --> TOT[Total provisionado<br/>soma dos itens com compoe_provisao]
+    CONV --> FI[Frete internacional]
+    E --> LIB[Taxa de liberação]
+    SISC & ICMS & TCIF & TL & AM & AA & DESP & FI & LIB --> TOT[Total provisionado<br/>soma dos itens com compoe_provisao]
     TOT --> COMP[Atribuição de competência]
 ```
 
@@ -33,9 +33,9 @@ flowchart TD
 |----------|--------|
 | `invoice_brl`, `frete_brl`, `seguro_brl` | Valor × taxa da moeda (RN01) |
 | `valor_invoice`, `valor_frete`, `taxa_usd`, `taxa_cny` | Entrada |
-| `siscomex`, `qtd_itens`, `qtd_containers`, `peso_bruto`, `peso_liquido` | Entrada |
+| `siscomex`, `valor_taxa_liberacao`, `qtd_itens`, `qtd_containers`, `peso_bruto`, `peso_liquido` | Entrada |
 | `modal`, `tipo_importacao` | Entrada (texto, para condições) |
-| `cif`, `ii`, `ipi`, `pis`, `cofins`, `afrmm`, `icms`, ... | Resultado de componentes anteriores |
+| `cif`, `ii`, `ipi`, `pis`, `cofins`, `icms`, ... | Resultado de componentes anteriores |
 | `valor_carga` | Alias configurável (padrão: `cif`), pendente de confirmação |
 | `aliq.<imposto>` | Alíquota vigente (ou override do processo) |
 | `p.<chave>` | Parâmetro vigente resolvido no escopo do processo (tipo, transportadora, despachante, terminal) |
@@ -49,19 +49,19 @@ As fórmulas de impostos são uma proposta baseada na sistemática usual de impo
 | Componente | Expressão padrão | Provisão | Competência |
 |------------|------------------|----------|-------------|
 | CIF | `invoice_brl + frete_brl + siscomex` | Não (base) | – |
-| II | `cif * aliq.ii` | Sim | Mês da DI |
-| IPI | `(cif + ii) * aliq.ipi` | Sim | Mês da DI |
+| II | `se(p.ii_suspenso == 1, 0, cif * aliq.ii)` | Sim | Mês da DI |
+| IPI | `se(p.ipi_suspenso == 1, 0, (cif + ii) * aliq.ipi)` | Sim | Mês da DI |
 | PIS | `cif * aliq.pis` | Sim | Mês da DI |
 | COFINS | `cif * aliq.cofins` | Sim | Mês da DI |
-| AFRMM | `se(modal == 'MARITIMO', frete_brl * p.afrmm_percentual, 0)` | Sim | Mês da DI |
-| ICMS | `(cif + ii + ipi + pis + cofins + afrmm + p.icms_outras_despesas) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da DI |
+| Taxa Siscomex | `siscomex` | Sim | Mês da DI |
+| ICMS | `(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da DI |
 | TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_di` | Sim | Corte dia 15 |
 | Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da DI |
-| Transporte secundário | `qtd_containers * p.ts_valor_container + valor_carga * p.ts_percentual` | Sim | Mês da DI |
 | Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da DI |
 | Armazenagem aérea | Pendente. Até a definição: `p.arm_aerea_valor_manual` | Sim | Mês da DI |
 | Despachante | `p.despachante_honorario_di` | Sim | Mês da DI |
-| Frete internacional | `frete_brl + p.taxa_liberacao` | A confirmar | Mês da DI |
+| Frete internacional | `frete_brl` | Sim | Mês da DI |
+| Taxa de liberação | `valor_taxa_liberacao` (informada em cada processo) | Sim | Mês da DI |
 
 Valores iniciais dos parâmetros:
 
@@ -72,16 +72,17 @@ Valores iniciais dos parâmetros:
 | `competencia_dia_corte` | Global | 15 |
 | `tl_valor_container` | Transportadora | a cadastrar |
 | `tl_percentual` | Transportadora | 0,0006 (0,06%) |
-| `ts_valor_container` | Transportadora | 1.000,00 |
-| `ts_percentual` | Transportadora | 0,0001 (0,01%) |
 | `arm_mar_pct_periodo1` | Terminal | 0,0092 (0,92%) |
 | `arm_mar_minimo` | Terminal | 0 (a confirmar) |
-| `despachante_honorario_di` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo) |
-| `afrmm_percentual` | Global | 0,08 (validar com Fiscal) |
-| `taxa_liberacao` | Global/agente | a cadastrar |
+| `despachante_honorario_di` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo e Adicionar Ativo) |
+| `ii_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
+| `ipi_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
 
-Atenção a dois pontos:
-- Como o CIF atual já inclui o Siscomex, a fórmula do ICMS não soma o Siscomex de novo. Se o Fiscal decidir tirar o Siscomex do CIF, as duas fórmulas mudam juntas (nova versão de ambas).
+Atenção a estes pontos:
+- Como o CIF atual já inclui o Siscomex, a fórmula do ICMS não soma o Siscomex de novo. Se o Fiscal decidir tirar o Siscomex do CIF, as duas fórmulas mudam juntas (nova versão de ambas). O componente Taxa Siscomex (grupo de impostos) mostra o valor e compõe a provisão.
+- Com II e IPI suspensos (padrão), os dois valem 0,00 e o ICMS parte de CIF + PIS + COFINS. Com `ii_suspenso` ou `ipi_suspenso` = 0 para um tipo, a fórmula volta a calcular o imposto e o ICMS o inclui. A memória do item guarda `suspenso: true` quando a suspensão se aplica.
+- A taxa de liberação é um componente próprio e vem do processo, nunca de um parâmetro fixo.
+- AFRMM e transporte secundário foram removidos. Os componentes ficam inativos no banco só para preservar o histórico de cálculos antigos.
 - O frete aparece no CIF (base) e no componente "Frete internacional" (desembolso). Por isso o total soma apenas itens com `compoe_provisao = true` (RN20).
 
 ## 4. Regra de competência
@@ -121,11 +122,11 @@ Cada `calculo_item.memoria` guarda o suficiente para reproduzir e explicar o val
 {
   "componente": "ICMS",
   "formula_versao": 1,
-  "expressao": "(cif + ii + ipi + pis + cofins + afrmm + p.icms_outras_despesas) / (1 - aliq.icms) * aliq.icms",
+  "expressao": "(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms",
   "variaveis": {
     "cif": "152340.55", "ii": "0.00", "ipi": "0.00",
-    "pis": "3199.15", "cofins": "14700.86", "afrmm": "1230.40",
-    "p.icms_outras_despesas": "0.00", "aliq.icms": "0.180000"
+    "pis": "3199.15", "cofins": "14700.86",
+    "aliq.icms": "0.180000"
   },
   "origem_aliquota": {"aliq.icms": "TABELA vigente desde 2026-01-01"},
   "valor_bruto": "37639.9668...",

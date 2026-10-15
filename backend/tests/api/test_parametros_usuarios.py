@@ -8,7 +8,7 @@ def _param(client, headers, chave):
 
 
 def test_nova_vigencia_encerra_anterior(client, pcm):
-    p = _param(client, pcm, "taxa_liberacao")
+    p = _param(client, pcm, "arm_mar_minimo")
     inicio = date.today() + timedelta(days=30)
     r = client.post(
         f"/api/v1/parametros/{p['id']}/vigencias",
@@ -20,12 +20,66 @@ def test_nova_vigencia_encerra_anterior(client, pcm):
         headers=pcm,
     )
     assert r.status_code == 201, r.text
-    p = _param(client, pcm, "taxa_liberacao")
+    p = _param(client, pcm, "arm_mar_minimo")
     hist = p["valores"][0]["historico"]
     assert hist[0]["valor"] == "400.000000" and hist[0]["vigencia_fim"] is None
     assert hist[1]["vigencia_fim"] == (inicio - timedelta(days=1)).isoformat()
     # o valor vigente hoje continua o anterior
-    assert p["valores"][0]["vigente"]["valor"] == "350.000000"
+    assert p["valores"][0]["vigente"]["valor"] == "0.000000"
+
+
+def test_parametro_booleano_aceita_so_zero_ou_um(client, pcm):
+    p = _param(client, pcm, "ii_suspenso")
+    assert p["tipo_valor"] == "BOOLEANO"
+    r = client.post(
+        f"/api/v1/parametros/{p['id']}/vigencias",
+        json={"valor": "2", "vigencia_inicio": "2099-01-01", "justificativa": "Valor inválido"},
+        headers=pcm,
+    )
+    assert r.status_code == 422
+    assert "1 (sim) ou 0 (não)" in r.text
+
+
+def test_ii_nao_suspenso_para_um_tipo_no_futuro_nao_afeta_o_calculo_de_hoje(client, pcm, refs):
+    p = _param(client, pcm, "ii_suspenso")
+    r = client.post(
+        f"/api/v1/parametros/{p['id']}/vigencias",
+        json={
+            "escopo_ref_id": refs["tipos"]["INDUSTRIALIZACAO"],
+            "valor": "0",
+            "vigencia_inicio": "2099-01-01",
+            "justificativa": "II volta a ser cobrado",
+        },
+        headers=pcm,
+    )
+    assert r.status_code == 201, r.text
+    imp = client.post(
+        "/api/v1/importacoes",
+        json={
+            "numero_declaracao": "26/9999999-0",
+            "data_declaracao": "2026-10-16",
+            "tipo_importacao_id": refs["tipos"]["INDUSTRIALIZACAO"],
+            "modal": "MARITIMO",
+            "valor_invoice": "10000.00",
+            "moeda_invoice": "BRL",
+            "valor_frete": "500.00",
+            "moeda_frete": "BRL",
+            "qtd_itens": 1,
+            "qtd_containers": 1,
+        },
+        headers=pcm,
+    ).json()
+    calc = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm).json()
+    ii = next(i for i in calc["itens"] if i["componente_codigo"] == "II")
+    assert ii["valor"] == "0.00"
+    assert ii["memoria"]["suspenso"] is True
+
+
+def test_parametros_removidos_nao_existem(client, pcm):
+    chaves = {p["chave"] for p in client.get("/api/v1/parametros", headers=pcm).json()}
+    removidos = {"afrmm_percentual", "ts_valor_container", "ts_percentual", "taxa_liberacao"}
+    assert not removidos & chaves
+    assert {"ii_suspenso", "ipi_suspenso"} <= chaves
 
 
 def test_vigencia_retroativa_rejeitada(client, pcm):
@@ -60,7 +114,7 @@ def test_financeiro_nao_altera_parametro(client, financeiro):
 
 def test_aliquotas_e_componentes(client, pcm):
     a = client.get("/api/v1/aliquotas", headers=pcm).json()
-    assert len(a["tipos"]) == 2
+    assert len(a["tipos"]) == 3
     assert {ln["imposto"]["codigo"] for ln in a["linhas"]} >= {"II", "ICMS"}
     comps = client.get("/api/v1/componentes", headers=pcm).json()
     assert comps[0]["codigo"] == "CIF"

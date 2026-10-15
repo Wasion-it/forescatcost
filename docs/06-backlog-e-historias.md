@@ -115,14 +115,14 @@ Cenário: Uso e Consumo
   Então o componente Despachante é R$ 900,00
 ```
 
-### HU04: Transportes local e secundário (B14)
-Como analista do PCM, quero que os transportes sejam calculados por container mais um percentual sobre a carga, com valores da transportadora selecionada.
+### HU04: Transporte local (B14)
+Como analista do PCM, quero que o transporte local seja calculado por container mais um percentual sobre a carga, com valores da transportadora selecionada. O transporte secundário não existe mais.
 
 ```gherkin
-Cenário: Transporte secundário
+Cenário: Transporte local
   Dado 2 containers e valor da carga de R$ 200.000,00
-  E os parâmetros de transporte secundário vigentes são R$ 1.000,00 e 0,01%
-  Então o transporte secundário é R$ 2.020,00
+  E os parâmetros de transporte local vigentes são R$ 1.500,00 e 0,06%
+  Então o transporte local é R$ 3.120,00
 ```
 
 ### HU05: Memória de cálculo (B17)

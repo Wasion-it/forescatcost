@@ -43,6 +43,7 @@ class Entradas:
     peso_bruto: Decimal
     peso_liquido: Decimal
     valor_armazenagem_aerea: Decimal = Decimal(0)
+    valor_taxa_liberacao: Decimal = Decimal(0)
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ def variaveis_base(entradas: Entradas) -> dict[str, Valor]:
         "invoice_brl": invoice_brl,
         "frete_brl": frete_brl,
         "siscomex": entradas.valor_siscomex,
+        "valor_taxa_liberacao": entradas.valor_taxa_liberacao,
         "qtd_itens": Decimal(entradas.qtd_itens),
         "qtd_containers": Decimal(entradas.qtd_containers),
         "peso_bruto": entradas.peso_bruto,
