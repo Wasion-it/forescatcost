@@ -10,7 +10,7 @@ from dateutil.relativedelta import relativedelta
 
 class RegraCompetencia(StrEnum):
     MES_REFERENCIA = "MES_REFERENCIA"
-    """Mês da data da DI (ou da data prevista, se ainda não houver DI)."""
+    """Mês da data da IP (ou da data prevista, se ainda não houver IP)."""
     CORTE_DIA = "CORTE_DIA"
     """Se o dia for maior que o dia de corte, provisiona no mês seguinte."""
 

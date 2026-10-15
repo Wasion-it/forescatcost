@@ -35,7 +35,7 @@ class Execucao:
 
 def entradas_de(imp: Importacao) -> Entradas:
     if imp.data_referencia is None:
-        raise ErroNegocio("Informe a data da declaração ou a data prevista antes de calcular")
+        raise ErroNegocio("Informe a data da IP ou a data prevista antes de calcular")
     return Entradas(
         data_referencia=imp.data_referencia,
         tipo_importacao=imp.tipo_importacao.codigo,
@@ -157,7 +157,7 @@ def previa(db: Session, imp: Importacao) -> dict:
 
 def _snapshot_entradas(imp: Importacao, execucao: Execucao) -> dict:
     campos = [
-        "tipo_declaracao", "numero_declaracao", "data_declaracao", "data_prevista", "modal",
+        "numero_ip", "data_ip", "data_prevista", "modal",
         "valor_invoice", "moeda_invoice", "valor_frete", "moeda_frete", "qtd_itens",
         "qtd_containers", "taxa_usd", "taxa_cny", "valor_siscomex", "peso_bruto_kg",
         "peso_liquido_kg", "valor_armazenagem_aerea", "valor_taxa_liberacao",

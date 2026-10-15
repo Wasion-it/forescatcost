@@ -54,7 +54,7 @@ npm run build            # typecheck + build
 
 ## O que o MVP entrega
 
-- Cadastro, edição (com controle de concorrência), consulta e cancelamento de processos (DI ou DUIMP, ou só data prevista).
+- Cadastro, edição (com controle de concorrência), consulta e cancelamento de processos (com número e data da IP, ou só data prevista).
 - Motor de cálculo puro com fórmulas versionadas em banco e avaliador seguro (sem `eval`), aritmética `Decimal` e regra de competência do dia 15.
 - Cada cálculo é uma versão imutável, com memória por componente, snapshot de entradas e parâmetros e hash de integridade. O recálculo exige motivo.
 - Parâmetros e alíquotas com vigência (sem sobreposição, garantida por constraint no PostgreSQL) e valores por escopo (tipo de importação, transportadora, terminal).

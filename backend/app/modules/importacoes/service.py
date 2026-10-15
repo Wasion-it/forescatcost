@@ -41,18 +41,15 @@ def _validar_referencias(db: Session, dados: ImportacaoEntrada) -> None:
 
 
 def _verificar_duplicidade(db: Session, dados: ImportacaoEntrada, ignorar_id: uuid.UUID | None):
-    if not dados.numero_declaracao:
+    if not dados.numero_ip:
         return
-    consulta = select(Importacao).where(
-        Importacao.tipo_declaracao == dados.tipo_declaracao,
-        Importacao.numero_declaracao == dados.numero_declaracao,
-    )
+    consulta = select(Importacao).where(Importacao.numero_ip == dados.numero_ip)
     if ignorar_id:
         consulta = consulta.where(Importacao.id != ignorar_id)
     existente = db.scalar(consulta)
     if existente:
         raise ErroNegocio(
-            f"A {dados.tipo_declaracao} {dados.numero_declaracao} já está no processo "
+            f"A IP {dados.numero_ip} já está no processo "
             f"{existente.numero_processo}",
             status=409,
         )
@@ -66,7 +63,7 @@ def criar(db: Session, dados: ImportacaoEntrada, usuario: Usuario) -> Importacao
     try:
         db.flush()
     except IntegrityError as exc:
-        raise ErroNegocio("Número de declaração já cadastrado", status=409) from exc
+        raise ErroNegocio("Número de IP já cadastrado", status=409) from exc
     return imp
 
 
@@ -113,7 +110,7 @@ def consulta_lista(
     de: date | None,
     ate: date | None,
 ) -> Select:
-    data_ref = func.coalesce(Importacao.data_declaracao, Importacao.data_prevista)
+    data_ref = func.coalesce(Importacao.data_ip, Importacao.data_prevista)
     consulta = (
         select(Importacao, Calculo.total_provisionado)
         .join(TipoImportacao, TipoImportacao.id == Importacao.tipo_importacao_id)
@@ -127,7 +124,7 @@ def consulta_lista(
             filtro_numero.append(Importacao.numero == int(digitos))
         consulta = consulta.where(
             or_(
-                Importacao.numero_declaracao.ilike(termo),
+                Importacao.numero_ip.ilike(termo),
                 Importacao.observacoes.ilike(termo),
                 *filtro_numero,
             )

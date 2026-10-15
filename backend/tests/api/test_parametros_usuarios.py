@@ -56,8 +56,8 @@ def test_ii_nao_suspenso_para_um_tipo_no_futuro_nao_afeta_o_calculo_de_hoje(clie
     imp = client.post(
         "/api/v1/importacoes",
         json={
-            "numero_declaracao": "26/9999999-0",
-            "data_declaracao": "2026-10-16",
+            "numero_ip": "IP-26-9999",
+            "data_ip": "2026-10-16",
             "tipo_importacao_id": refs["tipos"]["INDUSTRIALIZACAO"],
             "modal": "MARITIMO",
             "valor_invoice": "10000.00",
@@ -79,6 +79,8 @@ def test_parametros_removidos_nao_existem(client, pcm):
     chaves = {p["chave"] for p in client.get("/api/v1/parametros", headers=pcm).json()}
     removidos = {"afrmm_percentual", "ts_valor_container", "ts_percentual", "taxa_liberacao"}
     assert not removidos & chaves
+    assert not {c for c in chaves if c.endswith("_di")}
+    assert {"tcif_valor_ip", "despachante_honorario_ip"} <= chaves
     assert {"ii_suspenso", "ipi_suspenso"} <= chaves
 
 
@@ -103,7 +105,7 @@ def test_percentual_fora_da_faixa(client, pcm):
 
 
 def test_financeiro_nao_altera_parametro(client, financeiro):
-    p = _param(client, financeiro, "tcif_valor_di")
+    p = _param(client, financeiro, "tcif_valor_ip")
     r = client.post(
         f"/api/v1/parametros/{p['id']}/vigencias",
         json={"valor": "1", "vigencia_inicio": "2027-01-01", "justificativa": "Sem permissão"},

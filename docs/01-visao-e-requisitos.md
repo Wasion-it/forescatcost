@@ -27,7 +27,7 @@ Dentro do escopo:
 - Motor de cálculo parametrizável (CIF, impostos, TCIF, transportes, armazenagens, despachante, frete).
 - Versionamento de cálculos, simulação de cenários e histórico.
 - Parâmetros com vigência (taxas, alíquotas, valores por transportadora/despachante/terminal).
-- Provisões (mensal, por DI, por tipo) e exportação Excel.
+- Provisões (mensal, por IP, por tipo) e exportação Excel.
 - Dashboard, controle de acesso por perfil e auditoria.
 
 Fora do escopo inicial (roadmap):
@@ -71,7 +71,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 
 | Termo | Definição |
 |-------|-----------|
-| DI / DUIMP | Declaração de Importação / Declaração Única de Importação (Novo Processo de Importação, que está substituindo a DI) |
+| IP | Identificador da importação provisionada. Número livre (sem formato fiscal) que identifica a provisão do processo; no lugar da declaração aduaneira, que não é usada porque a provisão acontece antes dela. O significado de IP foi inferido e deve ser confirmado |
 | CIF | Cost, Insurance and Freight. Aqui é a base de cálculo configurável (inicialmente Invoice + Frete + Siscomex) |
 | TCIF | Taxa de Controle de Incentivos Fiscais (SUFRAMA) |
 | Taxa de liberação | Despesa de liberação da carga, informada em cada processo (varia por agente e por processo). Aparece separada do frete internacional |
@@ -88,12 +88,12 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN02 | CIF = Invoice (BRL) + Frete (BRL) + Siscomex. A fórmula é configurável e versionada. |
 | RN03 | Alíquotas (II, IPI, PIS, COFINS, ICMS e outros) vêm de tabela parametrizada por tipo de importação, com origem "manual" ou "TecWin". Podem ser sobrescritas no processo, com justificativa obrigatória. |
 | RN04 | A ordem e a base de cálculo dos impostos seguem o pipeline definido no doc 04 e devem ser validadas pelo Fiscal antes do go-live. |
-| RN05 | TCIF = R$ 45,00 × quantidade de itens + R$ 245,00 por DI. |
-| RN06 | Competência: se o dia da DI for maior que 15, o valor é provisionado no mês seguinte; senão, no mês da DI. O dia de corte é parametrizável e a regra é configurável por componente (hoje aplica-se à TCIF). |
+| RN05 | TCIF = R$ 45,00 × quantidade de itens + R$ 245,00 por IP. |
+| RN06 | Competência: se o dia da data da IP for maior que 15, o valor é provisionado no mês seguinte; senão, no mês da data da IP. O dia de corte é parametrizável e a regra é configurável por componente (hoje aplica-se à TCIF). |
 | RN07 | Transporte local = valor por container × qtd. containers + 0,06% × valor da carga. Valores por transportadora, parametrizáveis. |
 | RN09 | Armazenagem marítima, 1º período = 0,92% × CIF. Períodos adicionais e valor mínimo são parametrizáveis por terminal (ex.: Chibatão). |
 | RN10 | Armazenagem aérea usa CIF, peso bruto e peso líquido. Fórmula pendente. Até a definição, permitir valor informado manualmente com justificativa. |
-| RN11 | Despachante: R$ 715,00 por DI (Industrialização) e R$ 900,00 por DI (Uso e Consumo e Adicionar Ativo). Parametrizável por despachante e tipo. |
+| RN11 | Despachante: R$ 715,00 por IP (Industrialização) e R$ 900,00 por IP (Uso e Consumo e Adicionar Ativo). Parametrizável por despachante e tipo. |
 | RN12 | Frete internacional (componente de desembolso) = Frete (BRL). A Taxa de liberação é outro componente, com o valor informado em cada processo (campo alor_taxa_liberacao), pois varia por processo. |
 | RN13 | Cada cálculo gera uma versão imutável. Só uma versão é a vigente por processo. Versões anteriores ficam no histórico. |
 | RN14 | O cálculo usa os parâmetros vigentes na data de referência e grava um snapshot deles. Recalcular um processo antigo não muda a versão anterior. |
@@ -101,7 +101,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN16 | Processos cancelados saem da provisão e mantêm o histórico. O cancelamento exige motivo. |
 | RN17 | Competência fechada pelo Financeiro bloqueia alterações que afetem aquele mês. Reabertura só por perfil autorizado, com motivo e auditoria. |
 | RN18 | Valores monetários usam aritmética decimal (nunca ponto flutuante). Cada componente é arredondado em 2 casas, meia para cima. A regra deve ser confirmada contra as planilhas atuais. |
-| RN19 | O número da DI/DUIMP é único quando informado e validado por máscara conforme o tipo de declaração. |
+| RN19 | O número da IP é único quando informado. É texto livre (até 30 caracteres), sem validação de formato fiscal. |
 | RN21 | II e IPI são suspensos (não pagos) por padrão, controlados pelos parâmetros ii_suspenso e ipi_suspenso (1 = suspenso, 0 = cobra), com exceção possível por tipo de importação e vigência. Suspenso, o valor é 0,00 e o ICMS não os inclui na base. A memória de cálculo marca o item como suspenso. |
 | RN22 | A Taxa Siscomex é um componente do grupo de impostos e compõe a provisão. O valor também já está no CIF (base), então o ICMS não soma o Siscomex de novo. |
 | RN20 | Cada componente indica se compõe o total de desembolso provisionado. Bases de cálculo, como o CIF, não somam no total, para evitar dupla contagem (o frete, por exemplo, entra no CIF e também no componente Frete Internacional). |
@@ -109,10 +109,10 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 ## 5. Requisitos funcionais
 
 ### Importações
-- RF01: Cadastrar processo com os dados de entrada (DI, data, tipo, invoice e moeda, frete e moeda, itens, containers, taxas USD/CNY, Siscomex, pesos, observações).
-- RF02: Permitir processo sem DI registrada (previsão antecipada), usando data prevista para competência.
+- RF01: Cadastrar processo com os dados de entrada (IP, data da IP, tipo, invoice e moeda, frete e moeda, itens, containers, taxas USD/CNY, Siscomex, pesos, observações).
+- RF02: Permitir processo sem IP (previsão antecipada), usando data prevista para competência.
 - RF03: Editar processo nos status permitidos, com controle de concorrência (versão otimista).
-- RF04: Consultar com filtros (período, tipo, status, DI, transportadora, despachante) e paginação.
+- RF04: Consultar com filtros (período, tipo, status, IP, transportadora, despachante) e paginação.
 - RF05: Cancelar processo com motivo.
 - RF06: Vincular transportadora, despachante, terminal e modal (marítimo/aéreo).
 
@@ -132,7 +132,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 
 ### Financeiro
 - RF17: Provisão mensal consolidada (competência × componente).
-- RF18: Provisão por DI/processo.
+- RF18: Provisão por IP/processo.
 - RF19: Provisão por tipo de importação.
 - RF20: Exportar relatórios para Excel (.xlsx) com filtros aplicados e data/usuário de emissão.
 - RF21: Fechar e reabrir competência mensal (snapshot da provisão no fechamento).
@@ -175,7 +175,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 8. Armazenagem aérea: fórmula a detalhar.
 9. Benefícios ZFM: como TCIF e Chibatão indicam operação em Manaus, os tratamentos de II/IPI/PIS/COFINS/ICMS diferem entre Industrialização e Uso e Consumo. Confirmar a tabela de alíquotas efetivas por tipo.
 10. Alíquotas por NCM: hoje há uma alíquota por processo? Com itens de NCMs diferentes, será necessário modelar adições/itens (previsto no modelo como opcional).
-11. DUIMP: quais operações já usam DUIMP? O sistema deve aceitar os dois formatos.
+11. IP: resolvida por interpretação. IP foi tratada como o identificador livre da importação provisionada, sem declaração aduaneira. Confirmar o significado com o usuário.
 12. Reforma Tributária (CBS/IBS): definir com o Fiscal como e quando provisionar os novos tributos (o sistema já suporta novos impostos parametrizáveis).
 13. Taxa de liberação: resolvida. O valor é variável e informado em cada processo.
-14. Data de referência dos parâmetros: data do cálculo, data da DI ou data prevista de chegada?
+14. Data de referência dos parâmetros: data do cálculo, data da IP ou data prevista de chegada?

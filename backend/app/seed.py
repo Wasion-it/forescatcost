@@ -77,14 +77,14 @@ NATUREZA = {
 PARAMETROS = {
     "competencia_dia_corte": ("Dia de corte da competência (TCIF)", "INTEIRO", "GLOBAL", "Competência", D(15)),
     "tcif_valor_item": ("TCIF por item", "MONETARIO", "GLOBAL", "TCIF", D(45)),
-    "tcif_valor_di": ("TCIF por DI", "MONETARIO", "GLOBAL", "TCIF", D(245)),
+    "tcif_valor_ip": ("TCIF por IP", "MONETARIO", "GLOBAL", "TCIF", D(245)),
     "ii_suspenso": ("Imposto de Importação suspenso (não paga)", "BOOLEANO", "TIPO_IMPORTACAO", "Impostos", D(1)),
     "ipi_suspenso": ("IPI suspenso (não paga)", "BOOLEANO", "TIPO_IMPORTACAO", "Impostos", D(1)),
     "tl_valor_container": ("Transporte local por container", "MONETARIO", "TRANSP_LOCAL", "Transporte local", D(1500)),
     "tl_percentual": ("Transporte local sobre o valor da carga", "PERCENTUAL", "TRANSP_LOCAL", "Transporte local", D("0.0006")),
     "arm_mar_pct_periodo1": ("Armazenagem marítima, 1º período, sobre o CIF", "PERCENTUAL", "TERMINAL", "Armazenagem", D("0.0092")),
     "arm_mar_minimo": ("Armazenagem marítima, valor mínimo", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
-    "despachante_honorario_di": ("Honorário do despachante por DI", "MONETARIO", "TIPO_IMPORTACAO", "Despachante", None),
+    "despachante_honorario_ip": ("Honorário do despachante por IP", "MONETARIO", "TIPO_IMPORTACAO", "Despachante", None),
 }  # fmt: skip
 
 ALIQUOTAS = {
@@ -165,7 +165,7 @@ def seed_base(db: Session) -> None:
                     parametro_id=p.id, valor=padrao, vigencia_inicio=INICIO, justificativa=EXEMPLO
                 )
             )
-        if chave == "despachante_honorario_di":
+        if chave == "despachante_honorario_ip":
             for codigo, valor in [
                 ("INDUSTRIALIZACAO", D(715)), ("USO_CONSUMO", D(900)), ("ADICIONAR_ATIVO", D(900)),
             ]:
@@ -224,7 +224,7 @@ def seed_exemplos(db: Session) -> None:
 
     def base(**kw):
         padrao = dict(
-            tipo_declaracao="DI", modal="MARITIMO", moeda_invoice="USD", moeda_frete="USD",
+            modal="MARITIMO", moeda_invoice="USD", moeda_frete="USD",
             taxa_usd=D("5.4210"), taxa_cny=D("0.7512"), valor_siscomex=D("154.23"),
             transportadora_local_id=transp["Rodo Norte Logística"],
             despachante_id=desp["Despachos Manaus Assessoria"], terminal_id=term["Chibatão"],
@@ -233,47 +233,47 @@ def seed_exemplos(db: Session) -> None:
         return ImportacaoEntrada(**padrao)
 
     exemplos = [
-        (base(numero_declaracao="26/0812345-1", data_declaracao=date(2026, 8, 5),
+        (base(numero_ip="IP-26-0001", data_ip=date(2026, 8, 5),
               tipo_importacao_id=tipo["INDUSTRIALIZACAO"], valor_invoice=D("182000"), valor_frete=D("6400"),
               qtd_itens=14, qtd_containers=2, peso_bruto_kg=D("18400"), peso_liquido_kg=D("17100"),
               valor_taxa_liberacao=D(350), observacoes="Placas eletrônicas para linha de montagem"), "calcular"),
-        (base(numero_declaracao="26/0823456-2", data_declaracao=date(2026, 8, 21),
+        (base(numero_ip="IP-26-0002", data_ip=date(2026, 8, 21),
               tipo_importacao_id=tipo["USO_CONSUMO"], valor_invoice=D("38500"), valor_frete=D("2900"),
               qtd_itens=6, qtd_containers=1, peso_bruto_kg=D("4200"), peso_liquido_kg=D("3900"),
               valor_taxa_liberacao=D(420), observacoes="Peças de manutenção"), "calcular"),
-        (base(numero_declaracao="26/0910111-3", data_declaracao=date(2026, 9, 9),
+        (base(numero_ip="IP-26-0003", data_ip=date(2026, 9, 9),
               tipo_importacao_id=tipo["INDUSTRIALIZACAO"], moeda_invoice="CNY", valor_invoice=D("1450000"),
               valor_frete=D("8200"), qtd_itens=32, qtd_containers=4, peso_bruto_kg=D("52000"),
               peso_liquido_kg=D("49800"), valor_taxa_liberacao=D(280), observacoes="Componentes plásticos injetados"), "calcular"),
-        (base(numero_declaracao="26/0920222-4", data_declaracao=date(2026, 9, 18),
+        (base(numero_ip="IP-26-0004", data_ip=date(2026, 9, 18),
               tipo_importacao_id=tipo["USO_CONSUMO"], modal="AEREO", valor_invoice=D("12800"),
               valor_frete=D("1650"), qtd_itens=3, qtd_containers=0, peso_bruto_kg=D("380"),
               peso_liquido_kg=D("340"), valor_armazenagem_aerea=D("1840"),
               terminal_id=term["TECA Aeroporto Eduardo Gomes"], valor_taxa_liberacao=D(510),
               observacoes="Ferramental urgente"), "calcular"),
-        (base(numero_declaracao="26/1003333-5", data_declaracao=date(2026, 10, 2),
+        (base(numero_ip="IP-26-0005", data_ip=date(2026, 10, 2),
               tipo_importacao_id=tipo["INDUSTRIALIZACAO"], valor_invoice=D("265000"), valor_frete=D("9800"),
               qtd_itens=21, qtd_containers=3, peso_bruto_kg=D("31000"), peso_liquido_kg=D("29400"),
               transportadora_local_id=transp["Amazon Cargo Transportes"],
               valor_taxa_liberacao=D(390)), "calcular"),
-        (base(numero_declaracao="26/1021666-8", data_declaracao=date(2026, 10, 21),
+        (base(numero_ip="IP-26-0006", data_ip=date(2026, 10, 21),
               tipo_importacao_id=tipo["ADICIONAR_ATIVO"], valor_invoice=D("76000"), valor_frete=D("4100"),
               qtd_itens=5, qtd_containers=1, peso_bruto_kg=D("8300"), peso_liquido_kg=D("7900"),
               valor_taxa_liberacao=D(350), observacoes="Máquina para adicionar ao ativo imobilizado"),
          "calcular"),
-        (base(numero_declaracao="26/1014444-6", data_declaracao=date(2026, 10, 16),
+        (base(numero_ip="IP-26-0007", data_ip=date(2026, 10, 16),
               tipo_importacao_id=tipo["INDUSTRIALIZACAO"], moeda_invoice="CNY", valor_invoice=D("980000"),
               valor_frete=D("7100"), qtd_itens=18, qtd_containers=3, peso_bruto_kg=D("27600"),
               peso_liquido_kg=D("26000"), despachante_id=desp["Aduana Norte Comissária"],
-              observacoes="DI após o dia 15: TCIF vai para novembro"), "calcular_e_editar"),
+              observacoes="IP após o dia 15: TCIF vai para novembro"), "calcular_e_editar"),
         (base(data_prevista=date(2026, 11, 10), tipo_importacao_id=tipo["USO_CONSUMO"],
               valor_invoice=D("54000"), valor_frete=D("3300"), qtd_itens=9, qtd_containers=1,
               peso_bruto_kg=D("6100"), peso_liquido_kg=D("5700"),
-              observacoes="Embarque previsto, DI ainda não registrada"), "calcular"),
+              observacoes="Embarque previsto, IP ainda não gerada"), "calcular"),
         (base(data_prevista=date(2026, 12, 3), tipo_importacao_id=tipo["INDUSTRIALIZACAO"],
               valor_invoice=D("310000"), valor_frete=D("11200"), qtd_itens=25, qtd_containers=4,
               peso_bruto_kg=D("40100"), peso_liquido_kg=D("38200")), "rascunho"),
-        (base(numero_declaracao="26/0930555-7", data_declaracao=date(2026, 9, 30),
+        (base(numero_ip="IP-26-0008", data_ip=date(2026, 9, 30),
               tipo_importacao_id=tipo["USO_CONSUMO"], valor_invoice=D("9900"), valor_frete=D("1200"),
               qtd_itens=2, qtd_containers=1, peso_bruto_kg=D("900"), peso_liquido_kg=D("820")), "cancelar"),
     ]  # fmt: skip

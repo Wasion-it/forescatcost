@@ -62,10 +62,9 @@ def listar(
         {
             "id": imp.id,
             "numero_processo": imp.numero_processo,
-            "tipo_declaracao": imp.tipo_declaracao,
-            "numero_declaracao": imp.numero_declaracao,
+            "numero_ip": imp.numero_ip,
             "data_referencia": imp.data_referencia,
-            "data_declaracao": imp.data_declaracao,
+            "data_ip": imp.data_ip,
             "tipo_importacao": imp.tipo_importacao,
             "modal": imp.modal,
             "status": imp.status,

@@ -227,18 +227,16 @@ class Importacao(Base):
     __tablename__ = "importacao"
     __table_args__ = (
         Index(
-            "ux_importacao_declaracao",
-            "tipo_declaracao",
-            "numero_declaracao",
+            "ux_importacao_ip",
+            "numero_ip",
             unique=True,
-            postgresql_where=text("numero_declaracao IS NOT NULL"),
+            postgresql_where=text("numero_ip IS NOT NULL"),
         ),
     )
     id: Mapped[uuid.UUID] = _uuid_pk()
     numero: Mapped[int] = mapped_column(Integer, Identity(start=1), unique=True)
-    tipo_declaracao: Mapped[str] = mapped_column(String(10), default="DI")
-    numero_declaracao: Mapped[str | None] = mapped_column(String(30))
-    data_declaracao: Mapped[date | None] = mapped_column(Date)
+    numero_ip: Mapped[str | None] = mapped_column(String(30))
+    data_ip: Mapped[date | None] = mapped_column(Date)
     data_prevista: Mapped[date | None] = mapped_column(Date)
     tipo_importacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tipo_importacao.id"))
     modal: Mapped[str] = mapped_column(String(20))
@@ -286,7 +284,7 @@ class Importacao(Base):
 
     @property
     def data_referencia(self) -> date | None:
-        return self.data_declaracao or self.data_prevista
+        return self.data_ip or self.data_prevista
 
 
 # --------------------------------------------------------------------------- Cálculo

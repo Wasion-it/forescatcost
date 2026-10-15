@@ -49,32 +49,32 @@ As fórmulas de impostos são uma proposta baseada na sistemática usual de impo
 | Componente | Expressão padrão | Provisão | Competência |
 |------------|------------------|----------|-------------|
 | CIF | `invoice_brl + frete_brl + siscomex` | Não (base) | – |
-| II | `se(p.ii_suspenso == 1, 0, cif * aliq.ii)` | Sim | Mês da DI |
-| IPI | `se(p.ipi_suspenso == 1, 0, (cif + ii) * aliq.ipi)` | Sim | Mês da DI |
-| PIS | `cif * aliq.pis` | Sim | Mês da DI |
-| COFINS | `cif * aliq.cofins` | Sim | Mês da DI |
-| Taxa Siscomex | `siscomex` | Sim | Mês da DI |
-| ICMS | `(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da DI |
-| TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_di` | Sim | Corte dia 15 |
-| Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da DI |
-| Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da DI |
-| Armazenagem aérea | Pendente. Até a definição: `p.arm_aerea_valor_manual` | Sim | Mês da DI |
-| Despachante | `p.despachante_honorario_di` | Sim | Mês da DI |
-| Frete internacional | `frete_brl` | Sim | Mês da DI |
-| Taxa de liberação | `valor_taxa_liberacao` (informada em cada processo) | Sim | Mês da DI |
+| II | `se(p.ii_suspenso == 1, 0, cif * aliq.ii)` | Sim | Mês da IP |
+| IPI | `se(p.ipi_suspenso == 1, 0, (cif + ii) * aliq.ipi)` | Sim | Mês da IP |
+| PIS | `cif * aliq.pis` | Sim | Mês da IP |
+| COFINS | `cif * aliq.cofins` | Sim | Mês da IP |
+| Taxa Siscomex | `siscomex` | Sim | Mês da IP |
+| ICMS | `(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da IP |
+| TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_ip` | Sim | Corte dia 15 |
+| Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da IP |
+| Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da IP |
+| Armazenagem aérea | Pendente. Até a definição: `p.arm_aerea_valor_manual` | Sim | Mês da IP |
+| Despachante | `p.despachante_honorario_ip` | Sim | Mês da IP |
+| Frete internacional | `frete_brl` | Sim | Mês da IP |
+| Taxa de liberação | `valor_taxa_liberacao` (informada em cada processo) | Sim | Mês da IP |
 
 Valores iniciais dos parâmetros:
 
 | Chave | Escopo | Valor inicial |
 |-------|--------|---------------|
 | `tcif_valor_item` | Global | 45,00 |
-| `tcif_valor_di` | Global | 245,00 |
+| `tcif_valor_ip` | Global | 245,00 |
 | `competencia_dia_corte` | Global | 15 |
 | `tl_valor_container` | Transportadora | a cadastrar |
 | `tl_percentual` | Transportadora | 0,0006 (0,06%) |
 | `arm_mar_pct_periodo1` | Terminal | 0,0092 (0,92%) |
 | `arm_mar_minimo` | Terminal | 0 (a confirmar) |
-| `despachante_honorario_di` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo e Adicionar Ativo) |
+| `despachante_honorario_ip` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo e Adicionar Ativo) |
 | `ii_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
 | `ipi_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
 
@@ -96,7 +96,7 @@ def competencia(data_ref: date, regra: RegraCompetencia, dia_corte: int) -> date
     return inicio_mes
 ```
 
-`data_ref` = data da DI. Se ainda não houver DI, usa a data prevista. Isso define a competência inicial. Quando a DI for registrada, o recálculo pode mover a competência, e a mudança fica visível na comparação de versões.
+`data_ref` = data da IP. Se ainda não houver IP, usa a data prevista. Isso define a competência inicial. Quando a IP for informada, o recálculo pode mover a competência, e a mudança fica visível na comparação de versões.
 
 ## 5. Avaliação segura de fórmulas
 
@@ -141,7 +141,7 @@ O `calculo.hash_integridade` (SHA-256 das entradas, parâmetros e resultados) pe
 
 ## 8. Estratégia de testes do motor
 
-1. Golden cases: coletar de 20 a 30 processos reais já calculados nas planilhas (os dois tipos, os dois modais, DI antes e depois do dia 15, moedas USD e CNY). Eles viram testes automatizados com tolerância de R$ 0,01 por componente.
+1. Golden cases: coletar de 20 a 30 processos reais já calculados nas planilhas (os dois tipos, os dois modais, IP antes e depois do dia 15, moedas USD e CNY). Eles viram testes automatizados com tolerância de R$ 0,01 por componente.
 2. Testes unitários por componente e pela regra de competência (dias 15, 16, 31, virada de ano).
 3. Testes de propriedade (Hypothesis): valores nunca negativos, monotonicidade (mais containers não reduz o custo), determinismo.
 4. Período paralelo: 1 a 2 ciclos de fechamento rodando sistema e planilha juntos, com relatório de divergências.

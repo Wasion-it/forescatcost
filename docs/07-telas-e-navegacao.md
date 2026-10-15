@@ -12,7 +12,7 @@
 | T06 | Prévia de cálculo / confirmação de recálculo | PCM | MVP |
 | T07 | Simulação de cenários | PCM, Fin | R1 |
 | T08 | Provisão mensal | PCM, Fin | MVP |
-| T09 | Provisão por DI | PCM, Fin | MVP |
+| T09 | Provisão por IP | PCM, Fin | MVP |
 | T10 | Provisão por tipo de importação | PCM, Fin | MVP |
 | T11 | Fechamento de competência | Fin, Admin | R1 |
 | T12 | Parâmetros gerais (com vigência) | PCM, Admin | MVP |
@@ -47,7 +47,7 @@ flowchart LR
     T05 -->|Cancelar processo| T05
 
     FIN --> T08[T08 Provisão mensal]
-    FIN --> T09[T09 Provisão por DI]
+    FIN --> T09[T09 Provisão por IP]
     FIN --> T10[T10 Provisão por tipo]
     FIN --> T11[T11 Fechamento]
     T08 -->|drill-down| T09
@@ -72,12 +72,12 @@ flowchart LR
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ Importações                                          [+ Nova importação]  │
 ├───────────────────────────────────────────────────────────────────────────┤
-│ Período [01/10/26–31/10/26]  Tipo [Todos ▾]  Status [Todos ▾]  DI [_____] │
+│ Período [01/10/26–31/10/26]  Tipo [Todos ▾]  Status [Todos ▾]  IP [_____] │
 │ Transportadora [Todas ▾]                         [Limpar] [Filtrar]       │
 ├──────────┬──────────────┬──────────┬──────────┬───────────┬───────────────┤
-│ Processo │ DI/DUIMP     │ Data DI  │ Tipo     │ Status    │ Total prov.   │
+│ Processo │ IP           │ Data IP  │ Tipo     │ Status    │ Total prov.   │
 ├──────────┼──────────────┼──────────┼──────────┼───────────┼───────────────┤
-│ IMP-0142 │ 26/1234567-8 │ 16/10/26 │ Industr. │ Calculado │ R$ 98.430,12  │
+│ IMP-0142 │ IP-26-0001   │ 16/10/26 │ Industr. │ Calculado │ R$ 98.430,12  │
 │ IMP-0143 │ (prevista)   │ 25/10/26 │ Uso/Cons │ Rascunho  │ –             │
 │ IMP-0144 │ 26/1234590-1 │ 03/10/26 │ Industr. │ ⚠ Desatual│ R$ 41.220,00  │
 └──────────┴──────────────┴──────────┴──────────┴───────────┴───────────────┘
@@ -105,7 +105,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 
 ### T05: Detalhe da importação
 ```
-┌─ IMP-0142 · DI 26/1234567-8 · Industrialização · Marítimo ── [Calculado] ─┐
+┌─ IMP-0142 · IP-26-0001      · Industrialização · Marítimo ── [Calculado] ─┐
 │ [Editar] [Recalcular] [Simular] [Cancelar processo] [Exportar]            │
 ├───────────────────────────────────────────────────────────────────────────┤
 │ [Resumo] [Memória de cálculo] [Versões (3)] [Auditoria]                   │
@@ -117,7 +117,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 │ ...                     │              │             │            │       │
 │ TCIF                    │ 12 itens     │ 45 + 245    │     785,00 │ 11/26 │
 │ Transporte local        │ 2 cont.      │ 1.500+0,06% │   3.128,39 │ 10/26 │
-│ Despachante             │ 1 DI         │ Industr.    │     715,00 │ 10/26 │
+│ Despachante             │ 1 IP         │ Industr.    │     715,00 │ 10/26 │
 ├─────────────────────────┴──────────────┴─────────────┴────────────┴───────┤
 │ Total provisionado: R$ 98.430,12   Versão 3 · 17/10/26 14:02 · j.silva    │
 └───────────────────────────────────────────────────────────────────────────┘

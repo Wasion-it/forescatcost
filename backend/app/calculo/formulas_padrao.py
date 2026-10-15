@@ -39,7 +39,7 @@ COMPONENTES_PADRAO: list[Componente] = [
     Componente(
         "TCIF",
         "TCIF (SUFRAMA)",
-        "qtd_itens * p.tcif_valor_item + p.tcif_valor_di",
+        "qtd_itens * p.tcif_valor_item + p.tcif_valor_ip",
         True,
         R.CORTE_DIA,
         80,
@@ -71,7 +71,7 @@ COMPONENTES_PADRAO: list[Componente] = [
     Componente(
         "DESPACHANTE",
         "Despachante",
-        "p.despachante_honorario_di",
+        "p.despachante_honorario_ip",
         True,
         R.MES_REFERENCIA,
         130,

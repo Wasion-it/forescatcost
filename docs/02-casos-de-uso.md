@@ -35,7 +35,7 @@ flowchart LR
         UC11[UC11 Manter fórmulas e componentes]
         UC12[UC12 Manter transportadoras, despachantes e terminais]
         UC13[UC13 Consultar provisão mensal]
-        UC14[UC14 Consultar provisão por DI]
+        UC14[UC14 Consultar provisão por IP]
         UC15[UC15 Consultar provisão por tipo]
         UC16[UC16 Exportar Excel]
         UC17[UC17 Visualizar dashboard]
@@ -63,7 +63,7 @@ flowchart LR
 Fluxo principal:
 1. O usuário acessa Importações > Nova.
 2. O sistema exibe o formulário com valores padrão (moedas, tipo, despachante padrão do tipo).
-3. O usuário informa tipo de declaração (DI/DUIMP), número (opcional), data da DI ou data prevista, tipo de importação, modal, invoice e moeda, frete e moeda, quantidade de itens e containers, taxas de câmbio, Siscomex, pesos, transportadora, despachante, terminal e observações.
+3. O usuário informa o número da IP (opcional, texto livre), data da IP ou data prevista, tipo de importação, modal, invoice e moeda, frete e moeda, quantidade de itens e containers, taxas de câmbio, Siscomex, pesos, transportadora, despachante, terminal e observações.
 4. O sistema valida os campos (RN01, RN19) e mostra prévia dos valores em BRL.
 5. O usuário clica em "Salvar e calcular".
 6. O sistema salva o processo e executa o UC06.
@@ -71,7 +71,7 @@ Fluxo principal:
 
 Fluxos alternativos:
 - 5a. "Salvar rascunho": salva sem calcular (status RASCUNHO).
-- 4a. Número de DI duplicado: bloqueia e indica o processo existente.
+- 4a. Número de IP duplicado: bloqueia e indica o processo existente.
 - 4b. Moeda sem taxa informada: bloqueia e destaca o campo.
 - 6a. Falta parâmetro vigente para algum componente: salva como RASCUNHO e lista as pendências.
 
@@ -154,7 +154,7 @@ Alternativo:
 | UC09 Manter parâmetros | Novo valor cria nova vigência e encerra a anterior. Não há edição retroativa sem permissão especial | RN14 |
 | UC10 Manter alíquotas | Por imposto, tipo de importação e (opcional) NCM. Origem manual/TecWin | RN03 |
 | UC12 Cadastros de apoio | Transportadoras, despachantes e terminais com suas tabelas de valores e vigência | RN07–RN11 |
-| UC14 / UC15 Provisão por DI / tipo | Visões do UC13 agrupadas por processo ou tipo | RN20 |
+| UC14 / UC15 Provisão por IP / tipo | Visões do UC13 agrupadas por processo ou tipo | RN20 |
 | UC16 Exportar Excel | Exporta a visão atual com cabeçalho (filtros, data, usuário) e valores numéricos (não texto) | – |
 | UC17 Dashboard | Gráficos e KPIs sobre as versões vigentes | – |
 | UC19 Usuários e perfis | Ativar/inativar, atribuir perfis. Nunca excluir fisicamente | RNF04 |

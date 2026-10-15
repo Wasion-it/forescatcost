@@ -15,7 +15,7 @@ Substituir a planilha no cálculo e na provisão mensal, com resultado idêntico
 | Cadastro, edição, consulta e cancelamento de importação | Integrações TecWin, ERP e PTAX |
 | Motor de cálculo com todos os componentes definidos (armazenagem aérea com valor manual) | Itens/NCM |
 | Versionamento de cálculo + memória + histórico | Previsto × realizado |
-| Provisão mensal, por DI e por tipo + Excel | Dashboard avançado |
+| Provisão mensal, por IP e por tipo + Excel | Dashboard avançado |
 | Dashboard básico (importações/mês, valor provisionado, por tipo, evolução) | |
 | Carga inicial dos processos em aberto | |
 
@@ -60,4 +60,4 @@ As datas são ilustrativas e dependem do tamanho do time, da disponibilidade dos
 | R1: Análise e controle | Simulações, governança de fórmulas, fechamento mensal formal |
 | R2: Automação de insumos | Câmbio e alíquotas automáticos, granularidade por NCM |
 | R3: Integração e inteligência | Provisão enviada ao ERP, comparação com o realizado para melhorar a acurácia e a aprovação formal |
-| Contínuo | Adequação à Reforma Tributária (CBS/IBS) e à DUIMP conforme o calendário legal |
+| Contínuo | Adequação à Reforma Tributária (CBS/IBS) conforme o calendário legal |

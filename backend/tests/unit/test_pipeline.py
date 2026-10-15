@@ -18,12 +18,12 @@ D = Decimal
 
 PARAMETROS = {
     "tcif_valor_item": D("45"),
-    "tcif_valor_di": D("245"),
+    "tcif_valor_ip": D("245"),
     "tl_valor_container": D("1500"),
     "tl_percentual": D("0.0006"),
     "arm_mar_pct_periodo1": D("0.0092"),
     "arm_mar_minimo": D("0"),
-    "despachante_honorario_di": D("900"),
+    "despachante_honorario_ip": D("900"),
     "ii_suspenso": D("1"),
     "ipi_suspenso": D("1"),
 }

@@ -40,7 +40,7 @@ Prioridade MoSCoW: M = Must, S = Should, C = Could. Estimativa em pontos (Fibona
 | B15 | Golden tests com processos reais das planilhas | E05 | M | 8 |
 | B16 | Gravação de versão, memória de cálculo e snapshot | E05 | M | 5 |
 | B17 | Tela de detalhe com memória de cálculo e histórico de versões | E05 | M | 8 |
-| B18 | Provisão mensal, por DI e por tipo (views + telas) | E06 | M | 8 |
+| B18 | Provisão mensal, por IP e por tipo (views + telas) | E06 | M | 8 |
 | B19 | Exportação Excel dos relatórios | E06 | M | 5 |
 | B20 | Dashboard básico (4 gráficos + KPIs) | E08 | S | 8 |
 | B21 | Override de alíquota por processo com justificativa | E03 | S | 3 |
@@ -62,7 +62,7 @@ Prioridade MoSCoW: M = Must, S = Should, C = Could. Estimativa em pontos (Fibona
 ## 3. Histórias de usuário
 
 ### HU01: Cadastrar importação (B10)
-Como analista do PCM, quero cadastrar um processo de importação com seus dados de DI, valores e logística, para que o sistema calcule a previsão sem planilha.
+Como analista do PCM, quero cadastrar um processo de importação com seus dados de IP, valores e logística, para que o sistema calcule a previsão sem planilha.
 
 Critérios de aceite:
 ```gherkin
@@ -78,28 +78,28 @@ Cenário: Moeda sem taxa
   Quando deixo a Taxa CNY em branco
   Então o sistema impede o salvamento e destaca o campo "Taxa CNY"
 
-Cenário: DI duplicada
-  Dado que já existe um processo com a DI "26/1234567-8"
-  Quando informo a mesma DI em um novo processo
+Cenário: IP duplicada
+  Dado que já existe um processo com a IP "IP-26-0001"
+  Quando informo a mesma IP em um novo processo
   Então o sistema bloqueia e exibe um link para o processo existente
 ```
 
 ### HU02: Calcular TCIF com regra do dia 15 (B14)
-Como analista do PCM, quero que a TCIF seja provisionada no mês seguinte quando a DI for registrada após o dia 15, para que a provisão reflita o desembolso real.
+Como analista do PCM, quero que a TCIF seja provisionada no mês seguinte quando a data da IP for após o dia 15, para que a provisão reflita o desembolso real.
 
 ```gherkin
-Cenário: DI até o dia 15
-  Dado uma DI com data 15/10/2026 e 10 itens
+Cenário: IP até o dia 15
+  Dado uma IP com data 15/10/2026 e 10 itens
   Quando o processo é calculado
   Então a TCIF é R$ 695,00 (10 × 45,00 + 245,00)
   E a competência da TCIF é 10/2026
 
-Cenário: DI após o dia 15
-  Dado uma DI com data 16/10/2026
+Cenário: IP após o dia 15
+  Dado uma IP com data 16/10/2026
   Então a competência da TCIF é 11/2026
 
 Cenário: Virada de ano
-  Dado uma DI com data 20/12/2026
+  Dado uma IP com data 20/12/2026
   Então a competência da TCIF é 01/2027
 ```
 

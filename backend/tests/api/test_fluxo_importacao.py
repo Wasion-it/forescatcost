@@ -15,9 +15,8 @@ _seq = count(100)
 def payload(refs):
     n = next(_seq)
     return {
-        "tipo_declaracao": "DI",
-        "numero_declaracao": f"26/{n:07d}-0",
-        "data_declaracao": "2026-10-16",
+        "numero_ip": f"IP-26-{n:04d}",
+        "data_ip": "2026-10-16",
         "tipo_importacao_id": refs["tipos"]["USO_CONSUMO"],
         "modal": "MARITIMO",
         "valor_invoice": "10000.00",
@@ -77,7 +76,7 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     assert itens["DESPACHANTE"]["valor"] == "900.00"  # Uso e Consumo
     assert "TRANSP_SEC" not in itens and "AFRMM" not in itens
     assert itens["TCIF"]["valor"] == "695.00"
-    assert itens["TCIF"]["competencia"] == "2026-11-01"  # DI no dia 16
+    assert itens["TCIF"]["competencia"] == "2026-11-01"  # IP no dia 16
     assert itens["II"]["competencia"] == "2026-10-01"
     assert "suspenso" not in itens["PIS"]["memoria"]
     assert itens["CIF"]["compoe_provisao"] is False
@@ -105,7 +104,7 @@ def test_taxa_de_liberacao_varia_por_processo(client, pcm, payload):
     for taxa in ("280.00", "510.00"):
         dados = {
             **payload,
-            "numero_declaracao": f"26/{next(_seq):07d}-0",
+            "numero_ip": f"IP-26-{next(_seq):04d}",
             "valor_taxa_liberacao": taxa,
         }
         imp = _criar(client, pcm, dados)
@@ -175,17 +174,31 @@ def test_validacoes_de_entrada(client, pcm, payload):
     assert r.status_code == 422
     assert "taxa CNY" in r.text
 
-    di_ruim = {**payload, "numero_declaracao": "123"}
-    assert client.post("/api/v1/importacoes", json=di_ruim, headers=pcm).status_code == 422
+    # IP é texto livre, sem formato fiscal; espaços são aparados e vazio vira nulo
+    livre = {**payload, "numero_ip": "  PROV/2026 #7  "}
+    r = client.post("/api/v1/importacoes", json=livre, headers=pcm)
+    assert r.status_code == 201
+    assert r.json()["numero_ip"] == "PROV/2026 #7"
+    assert "tipo_declaracao" not in r.json()
+    vazio = {**payload, "numero_ip": "   "}
+    r = client.post("/api/v1/importacoes", json=vazio, headers=pcm)
+    assert r.status_code == 201
+    assert r.json()["numero_ip"] is None
 
-    sem_data = {**payload, "data_declaracao": None}
-    assert client.post("/api/v1/importacoes", json=sem_data, headers=pcm).status_code == 422
+    sem_datas = {**payload, "data_ip": None, "data_prevista": None}
+    r = client.post("/api/v1/importacoes", json=sem_datas, headers=pcm)
+    assert r.status_code == 422
+    assert "data da IP ou a data prevista" in r.text
+
+    so_prevista = {**payload, "numero_ip": None, "data_ip": None, "data_prevista": "2026-12-01"}
+    assert client.post("/api/v1/importacoes", json=so_prevista, headers=pcm).status_code == 201
 
 
-def test_di_duplicada(client, pcm, payload):
+def test_ip_duplicada(client, pcm, payload):
     _criar(client, pcm, payload)
     r = client.post("/api/v1/importacoes", json=payload, headers=pcm)
     assert r.status_code == 409
+    assert "IP" in r.json()["detail"]
     assert "IMP-" in r.json()["detail"]
 
 
@@ -198,7 +211,7 @@ def test_financeiro_nao_cadastra_nem_calcula(client, financeiro, pcm, payload):
 
 
 def test_provisao_cancelamento_e_excel(client, pcm, financeiro, payload):
-    payload = {**payload, "data_declaracao": "2027-03-10"}  # mês isolado
+    payload = {**payload, "data_ip": "2027-03-10"}  # mês isolado
     imp = _criar(client, pcm, payload)
     client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
 
@@ -215,6 +228,8 @@ def test_provisao_cancelamento_e_excel(client, pcm, financeiro, payload):
     ).json()
     assert por_processo["linhas"][0]["rotulo"] == imp["numero_processo"]
     assert Decimal(por_processo["total"]) == total
+    assert por_processo["linhas"][0]["numero_ip"] == imp["numero_ip"]
+    assert "numero_declaracao" not in por_processo["linhas"][0]
 
     por_tipo = client.get("/api/v1/provisoes/por-tipo", params=params, headers=financeiro).json()
     assert por_tipo["linhas"][0]["chave"] == "USO_CONSUMO"
@@ -227,6 +242,12 @@ def test_provisao_cancelamento_e_excel(client, pcm, financeiro, payload):
     # Excel armazena números em ponto flutuante; comparamos em centavos
     valor_excel = Decimal(str(planilha.cell(ultima, planilha.max_column).value))
     assert valor_excel.quantize(Decimal("0.01")) == total
+
+    r = client.get("/api/v1/provisoes/por-processo/excel", params=params, headers=financeiro)
+    assert r.status_code == 200
+    cabecalho = [c.value for c in load_workbook(io.BytesIO(r.content)).active[5]]  # linha 5
+    assert "IP" in cabecalho
+    assert "DI/DUIMP" not in cabecalho
 
     r = client.post(
         f"/api/v1/importacoes/{imp['id']}/cancelar",
