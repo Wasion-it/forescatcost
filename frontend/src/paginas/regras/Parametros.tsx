@@ -11,7 +11,6 @@ const ESCOPOS: Record<string, string> = {
   GLOBAL: "Valor único",
   TIPO_IMPORTACAO: "Por tipo de importação",
   TRANSP_LOCAL: "Por transportadora local",
-  TRANSP_SECUNDARIA: "Por transportadora secundária",
   DESPACHANTE: "Por despachante",
   TERMINAL: "Por terminal",
 };
@@ -19,6 +18,7 @@ const ESCOPOS: Record<string, string> = {
 export function exibirValor(tipo: Parametro["tipo_valor"], valor: string): string {
   if (tipo === "PERCENTUAL") return percentual(valor, 4);
   if (tipo === "INTEIRO") return String(Number(valor));
+  if (tipo === "BOOLEANO") return Number(valor) !== 0 ? "Sim" : "Não";
   return brl(valor);
 }
 
@@ -152,8 +152,7 @@ function DialogoVigencia({ parametro, aoFechar, aoSalvar }: { parametro: Paramet
     {
       GLOBAL: [],
       TIPO_IMPORTACAO: tipos.data ?? [],
-      TRANSP_LOCAL: transp.data?.filter((t) => t.tipo_servico !== "SECUNDARIO") ?? [],
-      TRANSP_SECUNDARIA: transp.data?.filter((t) => t.tipo_servico !== "LOCAL") ?? [],
+      TRANSP_LOCAL: transp.data ?? [],
       DESPACHANTE: desp.data ?? [],
       TERMINAL: term.data ?? [],
     }[parametro.escopo] ?? [];
@@ -168,12 +167,13 @@ function DialogoVigencia({ parametro, aoFechar, aoSalvar }: { parametro: Paramet
 
   const atual = parametro.valores.find((v) => (v.escopo_ref_id ?? "") === ref)?.vigente;
   const percentualTipo = parametro.tipo_valor === "PERCENTUAL";
+  const booleano = parametro.tipo_valor === "BOOLEANO";
 
   function enviar() {
     setErroLocal(null);
     let convertido: string | null;
     try {
-      convertido = percentualTipo ? percentualParaFracao(valor) : paraDecimal(valor);
+      convertido = booleano ? valor : percentualTipo ? percentualParaFracao(valor) : paraDecimal(valor);
     } catch {
       setErroLocal("Valor inválido.");
       return;
@@ -217,8 +217,21 @@ function DialogoVigencia({ parametro, aoFechar, aoSalvar }: { parametro: Paramet
       <p className="suave">Valor atual: {atual ? `${exibirValor(parametro.tipo_valor, atual.valor)} desde ${data(atual.vigencia_inicio)}` : "nenhum"}</p>
       <div className="grade-campos">
         <div className="campo">
-          <label htmlFor="v-valor">{percentualTipo ? "Novo valor (%)" : parametro.tipo_valor === "INTEIRO" ? "Novo valor" : "Novo valor (R$)"}</label>
-          <input id="v-valor" className="entrada num" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder={percentualTipo ? "0,92" : ""} />
+          {booleano ? (
+            <>
+              <label htmlFor="v-valor">Novo valor</label>
+              <select id="v-valor" className="entrada" value={valor} onChange={(e) => setValor(e.target.value)}>
+                <option value="">Selecione</option>
+                <option value="1">Sim</option>
+                <option value="0">Não</option>
+              </select>
+            </>
+          ) : (
+            <>
+              <label htmlFor="v-valor">{percentualTipo ? "Novo valor (%)" : parametro.tipo_valor === "INTEIRO" ? "Novo valor" : "Novo valor (R$)"}</label>
+              <input id="v-valor" className="entrada num" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder={percentualTipo ? "0,92" : ""} />
+            </>
+          )}
         </div>
         <div className="campo">
           <label htmlFor="v-inicio">Vale a partir de</label>

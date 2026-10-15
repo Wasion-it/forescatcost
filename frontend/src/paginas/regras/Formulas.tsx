@@ -13,7 +13,7 @@ const NATUREZA: Record<string, string> = {
 };
 
 const COMPETENCIA: Record<string, string> = {
-  MES_REFERENCIA: "Mês da declaração",
+  MES_REFERENCIA: "Mês da IP",
   CORTE_DIA: "Mês seguinte após o dia de corte",
 };
 

@@ -469,6 +469,8 @@ textarea.entrada {
 /* ------------------------------------------------------------- Tabelas */
 
 .tabela-rolagem {
+  /* Contém textos .sr-only (absolutos) das células, que senão geram rolagem horizontal na página */
+  position: relative;
   overflow-x: auto;
 }
 
@@ -579,6 +581,10 @@ table.tabela {
 
 .status-desatualizado {
   color: var(--solimoes-escuro);
+}
+
+.status-fechado {
+  color: var(--agua);
 }
 
 .status-cancelado {
@@ -943,6 +949,28 @@ form > .cabecalho + .aviso + .painel {
   font-size: var(--t-2xl);
   font-weight: 500;
   text-align: left;
+}
+
+/* Fechamento da despesa: provisionado, fatura e diferença lado a lado */
+.comparacao-tres {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e-3);
+}
+
+.comparacao-tres strong {
+  font-size: var(--t-xl);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .comparacao-tres {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-dialogo {
+  display: grid;
+  gap: var(--e-4);
 }
 
 .tabela-compacta td,

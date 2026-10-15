@@ -88,6 +88,25 @@
   flex-direction: column;
 }
 
+.fita-nome-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+/* Selo de suspensão: texto e contorno, sem depender só da cor */
+.fita-suspenso {
+  padding: 0 6px;
+  border: 1px solid var(--agua);
+  border-radius: var(--r-controle);
+  background: var(--agua-claro);
+  color: var(--negro-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .fita-competencia {
   font-size: var(--t-xs);
   font-weight: 500;

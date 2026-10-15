@@ -14,7 +14,6 @@ const ABAS: { id: Aba; rotulo: string; singular: string }[] = [
   { id: "terminais", rotulo: "Terminais", singular: "terminal" },
 ];
 
-const SERVICO: Record<string, string> = { LOCAL: "Transporte local", SECUNDARIO: "Transporte secundário", AMBOS: "Local e secundário" };
 const MODAL: Record<string, string> = { MARITIMO: "Marítimo", AEREO: "Aéreo" };
 
 interface Registro {
@@ -77,7 +76,6 @@ export function Cadastros() {
               <tr>
                 <th scope="col">Nome</th>
                 <th scope="col">{aba === "terminais" ? "Modal" : "CNPJ"}</th>
-                {aba === "transportadoras" && <th scope="col">Serviço</th>}
                 <th scope="col">Situação</th>
                 <th scope="col">
                   <span className="sr-only">Ações</span>
@@ -91,7 +89,6 @@ export function Cadastros() {
                     <strong>{r.nome}</strong>
                   </td>
                   <td>{aba === "terminais" ? MODAL[r.modal ?? ""] : r.cnpj || <span className="suave">não informado</span>}</td>
-                  {aba === "transportadoras" && <td>{SERVICO[r.tipo_servico ?? ""]}</td>}
                   <td>
                     <span className={`status ${r.ativo ? "status-calculado" : "status-rascunho"}`}>{r.ativo ? "Ativo" : "Inativo"}</span>
                   </td>
@@ -176,18 +173,6 @@ function DialogoCadastro({
         <div className="campo">
           <label htmlFor="c-cnpj">CNPJ</label>
           <input id="c-cnpj" className="entrada" value={r.cnpj ?? ""} onChange={(e) => setR({ ...r, cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
-        </div>
-      )}
-      {aba === "transportadoras" && (
-        <div className="campo">
-          <label htmlFor="c-servico">Serviço</label>
-          <select id="c-servico" className="entrada" value={r.tipo_servico} onChange={(e) => setR({ ...r, tipo_servico: e.target.value })}>
-            {Object.entries(SERVICO).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
         </div>
       )}
       {aba === "terminais" && (

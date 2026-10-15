@@ -13,7 +13,8 @@ const ROTULOS_VARIAVEIS: Record<string, string> = {
   cif: "CIF",
   invoice_brl: "Invoice em R$",
   frete_brl: "Frete em R$",
-  siscomex: "Siscomex",
+  siscomex: "Taxa Siscomex",
+  valor_taxa_liberacao: "Taxa de liberação informada",
   qtd_itens: "Itens",
   qtd_containers: "Containers",
   valor_carga: "Valor da carga",
@@ -22,12 +23,14 @@ const ROTULOS_VARIAVEIS: Record<string, string> = {
 };
 
 function rotuloVariavel(nome: string): string {
+  if (nome.endsWith("_suspenso")) return "Suspenso (não paga)";
   if (nome.startsWith("aliq.")) return `Alíquota ${nome.slice(5).toUpperCase()}`;
   if (nome.startsWith("p.")) return nome.slice(2).replace(/_/g, " ");
   return ROTULOS_VARIAVEIS[nome] ?? nome.replace(/_/g, " ");
 }
 
 function valorVariavel(nome: string, valor: string): string {
+  if (nome.endsWith("_suspenso")) return Number(valor) !== 0 ? "Sim" : "Não";
   if (nome.startsWith("aliq.") || nome.endsWith("percentual") || nome.includes("_pct")) return percentual(valor);
   if (nome.startsWith("qtd") || nome === "modal" || nome.endsWith("dia_corte")) return valor;
   return brl(valor);
@@ -83,9 +86,16 @@ export function FitaCalculo({ calculo, competenciaPrincipal, animar = false }: P
                 <details className="fita-linha" key={item.componente_codigo} style={estilo}>
                   <summary>
                     <span className="fita-nome">
-                      {item.componente_nome}
+                      <span className="fita-nome-linha">
+                        {item.componente_nome}
+                        {item.memoria.suspenso && (
+                          <span className="fita-suspenso" title="Suspenso: não paga neste processo">
+                            Suspenso
+                          </span>
+                        )}
+                      </span>
                       {outroMes && (
-                        <span className="fita-competencia" title="Competência diferente do mês da declaração">
+                        <span className="fita-competencia" title="Competência diferente do mês da IP">
                           provisiona em {mesCurto(item.competencia)}
                         </span>
                       )}

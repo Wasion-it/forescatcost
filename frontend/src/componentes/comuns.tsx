@@ -17,6 +17,7 @@ export function Cabecalho({ titulo, descricao, acoes }: { titulo: ReactNode; des
 const ROTULO_STATUS: Record<string, string> = {
   RASCUNHO: "Rascunho",
   CALCULADO: "Calculado",
+  FECHADO: "Fechado",
   CANCELADO: "Cancelado",
   DESATUALIZADO: "Recálculo pendente",
 };

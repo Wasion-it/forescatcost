@@ -39,7 +39,7 @@ export interface RefNome {
 
 export interface Transportadora extends RefNome {
   cnpj: string | null;
-  tipo_servico: "LOCAL" | "SECUNDARIO" | "AMBOS";
+  tipo_servico: "LOCAL";
   ativo: boolean;
 }
 
@@ -53,12 +53,11 @@ export interface Terminal extends RefNome {
   ativo: boolean;
 }
 
-export type StatusImportacao = "RASCUNHO" | "CALCULADO" | "CANCELADO";
+export type StatusImportacao = "RASCUNHO" | "CALCULADO" | "FECHADO" | "CANCELADO";
 
 export interface ImportacaoEntrada {
-  tipo_declaracao: "DI" | "DUIMP";
-  numero_declaracao: string | null;
-  data_declaracao: string | null;
+  numero_ip: string | null;
+  data_ip: string | null;
   data_prevista: string | null;
   tipo_importacao_id: Id;
   modal: "MARITIMO" | "AEREO";
@@ -71,11 +70,11 @@ export interface ImportacaoEntrada {
   taxa_usd: Decimal | null;
   taxa_cny: Decimal | null;
   valor_siscomex: Decimal;
+  valor_taxa_liberacao: Decimal;
   peso_bruto_kg: Decimal;
   peso_liquido_kg: Decimal;
   valor_armazenagem_aerea: Decimal;
   transportadora_local_id: Id | null;
-  transportadora_secundaria_id: Id | null;
   despachante_id: Id | null;
   terminal_id: Id | null;
   observacoes: string | null;
@@ -96,6 +95,7 @@ export interface CalculoItem {
     formula_versao: number | null;
     variaveis: Record<string, string>;
     origens: Record<string, string>;
+    suspenso?: boolean;
   };
 }
 
@@ -119,12 +119,15 @@ export interface Importacao extends ImportacaoEntrada {
   status: StatusImportacao;
   calculo_desatualizado: boolean;
   motivo_cancelamento: string | null;
+  valor_fatura: Decimal | null;
+  numero_fatura: string | null;
+  fechado_em: string | null;
+  fechado_por_nome: string | null;
   versao: number;
   criado_em: string;
   atualizado_em: string;
   tipo_importacao: TipoImportacao;
   transportadora_local: RefNome | null;
-  transportadora_secundaria: RefNome | null;
   despachante: RefNome | null;
   terminal: RefNome | null;
   calculo_vigente: Calculo | null;
@@ -133,10 +136,9 @@ export interface Importacao extends ImportacaoEntrada {
 export interface ImportacaoResumo {
   id: Id;
   numero_processo: string;
-  tipo_declaracao: string;
-  numero_declaracao: string | null;
+  numero_ip: string | null;
   data_referencia: string | null;
-  data_declaracao: string | null;
+  data_ip: string | null;
   tipo_importacao: TipoImportacao;
   modal: string;
   status: StatusImportacao;
@@ -165,7 +167,7 @@ export interface LinhaProvisao {
   chave: string;
   rotulo: string;
   natureza?: string;
-  numero_declaracao?: string | null;
+  numero_ip?: string | null;
   data_referencia?: string | null;
   tipo_codigo?: string;
   tipo_nome?: string;
@@ -210,7 +212,7 @@ export interface Parametro {
   id: Id;
   chave: string;
   descricao: string;
-  tipo_valor: "MONETARIO" | "PERCENTUAL" | "INTEIRO";
+  tipo_valor: "MONETARIO" | "PERCENTUAL" | "INTEIRO" | "BOOLEANO";
   escopo: string;
   grupo: string;
   valores: {
