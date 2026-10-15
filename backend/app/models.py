@@ -234,8 +234,8 @@ class Importacao(Base):
             postgresql_where=text("numero_ip IS NOT NULL"),
         ),
         CheckConstraint(
-            "status <> 'FECHADO' OR (valor_fatura > 0 AND numero_fatura IS NOT NULL "
-            "AND numero_fatura <> '')",
+            "status <> 'FECHADO' OR (valor_fatura IS NOT NULL AND valor_fatura > 0 "
+            "AND numero_fatura IS NOT NULL AND numero_fatura <> '')",
             name="ck_importacao_fechamento",
         ),
     )

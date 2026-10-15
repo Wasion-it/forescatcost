@@ -224,6 +224,7 @@ def test_constraint_recusa_fechado_sem_fatura(client, pcm, payload):
         "UPDATE importacao SET status = 'FECHADO', valor_fatura = 10, numero_fatura = '' "
         "WHERE id = :id",
         "UPDATE importacao SET status = 'FECHADO', valor_fatura = 10 WHERE id = :id",
+        "UPDATE importacao SET status = 'FECHADO', numero_fatura = 'FT-1' WHERE id = :id",
     ]
     for sql in sqls:
         with SessionLocal() as db:

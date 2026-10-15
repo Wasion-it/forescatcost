@@ -38,8 +38,8 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_importacao_fechamento",
         "importacao",
-        "status <> 'FECHADO' OR (valor_fatura > 0 AND numero_fatura IS NOT NULL "
-        "AND numero_fatura <> '')",
+        "status <> 'FECHADO' OR (valor_fatura IS NOT NULL AND valor_fatura > 0 "
+        "AND numero_fatura IS NOT NULL AND numero_fatura <> '')",
     )
 
 
