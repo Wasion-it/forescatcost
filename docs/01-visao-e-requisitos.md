@@ -60,6 +60,7 @@ Legenda: C = criar, L = ler, A = alterar, E = excluir/cancelar, X = executar
 | Alíquotas de impostos | C L A | L | C L A |
 | Fórmulas e regras de cálculo | L | L | C L A (com aprovação) |
 | Provisões e relatórios | L X | L X | L |
+| Fechamento da despesa do processo (`importacao:editar`) | X | – | – |
 | Fechamento / reabertura de competência | – | X | X (reabertura) |
 | Dashboard | L | L | L |
 | Usuários e perfis | – | – | C L A E |
@@ -76,6 +77,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | TCIF | Taxa de Controle de Incentivos Fiscais (SUFRAMA) |
 | Taxa de liberação | Despesa de liberação da carga, informada em cada processo (varia por agente e por processo). Aparece separada do frete internacional |
 | Suspensão (II/IPI) | Condição em que o Imposto de Importação ou o IPI não é pago. Controlada por parâmetro e, por padrão, vale para todos os tipos |
+| Fechamento da despesa | Ação sobre um processo calculado: o PCM informa o valor e o número da fatura e o processo passa a FECHADO. Vale por processo e não é o fechamento de competência (mensal, do Financeiro, previsto para a R1) |
 | Competência | Mês em que o valor entra na provisão financeira |
 | Parâmetro com vigência | Valor válido de uma data inicial até uma data final, sem sobrescrever o histórico |
 | Memória de cálculo | Registro de fórmula, variáveis e resultado de cada componente |
@@ -94,7 +96,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN09 | Armazenagem marítima, 1º período = 0,92% × CIF. Períodos adicionais e valor mínimo são parametrizáveis por terminal (ex.: Chibatão). |
 | RN10 | Armazenagem aérea usa CIF, peso bruto e peso líquido. Fórmula pendente. Até a definição, permitir valor informado manualmente com justificativa. |
 | RN11 | Despachante: R$ 715,00 por IP (Industrialização) e R$ 900,00 por IP (Uso e Consumo e Adicionar Ativo). Parametrizável por despachante e tipo. |
-| RN12 | Frete internacional (componente de desembolso) = Frete (BRL). A Taxa de liberação é outro componente, com o valor informado em cada processo (campo alor_taxa_liberacao), pois varia por processo. |
+| RN12 | Frete internacional (componente de desembolso) = Frete (BRL). A Taxa de liberação é outro componente, com o valor informado em cada processo (campo valor_taxa_liberacao), pois varia por processo. |
 | RN13 | Cada cálculo gera uma versão imutável. Só uma versão é a vigente por processo. Versões anteriores ficam no histórico. |
 | RN14 | O cálculo usa os parâmetros vigentes na data de referência e grava um snapshot deles. Recalcular um processo antigo não muda a versão anterior. |
 | RN15 | Simulações não alteram a versão vigente nem a provisão. |
@@ -104,6 +106,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN19 | O número da IP é único quando informado. É texto livre (até 30 caracteres), sem validação de formato fiscal. |
 | RN21 | II e IPI são suspensos (não pagos) por padrão, controlados pelos parâmetros ii_suspenso e ipi_suspenso (1 = suspenso, 0 = cobra), com exceção possível por tipo de importação e vigência. Suspenso, o valor é 0,00 e o ICMS não os inclui na base. A memória de cálculo marca o item como suspenso. |
 | RN22 | A Taxa Siscomex é um componente do grupo de impostos e compõe a provisão. O valor também já está no CIF (base), então o ICMS não soma o Siscomex de novo. |
+| RN23 | Fechamento da despesa (por processo): só processo CALCULADO e sem recálculo pendente pode ser fechado. O fechamento exige o valor da fatura (maior que zero, 2 casas) e o número da fatura (texto, até 60 caracteres, sem espaços nas pontas). Registra data/hora e usuário. Processo FECHADO não pode ser editado, recalculado nem cancelado e continua somando na provisão. A regra é garantida também por constraint no banco. Não substitui o fechamento de competência (RN17, R1). |
 | RN20 | Cada componente indica se compõe o total de desembolso provisionado. Bases de cálculo, como o CIF, não somam no total, para evitar dupla contagem (o frete, por exemplo, entra no CIF e também no componente Frete Internacional). |
 
 ## 5. Requisitos funcionais
@@ -114,6 +117,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 - RF03: Editar processo nos status permitidos, com controle de concorrência (versão otimista).
 - RF04: Consultar com filtros (período, tipo, status, IP, transportadora, despachante) e paginação.
 - RF05: Cancelar processo com motivo.
+- RF05a: Fechar a despesa do processo calculado informando valor e número da fatura (RN23).
 - RF06: Vincular transportadora, despachante, terminal e modal (marítimo/aéreo).
 
 ### Cálculo

@@ -50,13 +50,15 @@
 
 | Entidade | Atributos principais | Observações |
 |----------|----------------------|-------------|
-| `importacao` | id, numero_processo (UK, sequencial interno), numero_ip (UK parcial quando não nulo; texto livre de até 30 caracteres), data_ip, data_prevista, tipo_importacao_id, modal (MARITIMO, AEREO, RODOVIARIO), valor_invoice, moeda_invoice, valor_frete, moeda_frete, valor_seguro, moeda_seguro, qtd_itens, qtd_containers, taxa_usd, taxa_cny, valor_siscomex, valor_taxa_liberacao, peso_bruto_kg, peso_liquido_kg, transportadora_local_id, despachante_id, terminal_id, status, motivo_cancelamento, observacoes, versao | Taxas USD/CNY ficam explícitas conforme os requisitos. Para outras moedas usar `importacao_taxa_cambio` |
+| `importacao` | id, numero_processo (UK, sequencial interno), numero_ip (UK parcial quando não nulo; texto livre de até 30 caracteres), data_ip, data_prevista, tipo_importacao_id, modal (MARITIMO, AEREO, RODOVIARIO), valor_invoice, moeda_invoice, valor_frete, moeda_frete, valor_seguro, moeda_seguro, qtd_itens, qtd_containers, taxa_usd, taxa_cny, valor_siscomex, valor_taxa_liberacao, peso_bruto_kg, peso_liquido_kg, transportadora_local_id, despachante_id, terminal_id, status, motivo_cancelamento, valor_fatura, numero_fatura (até 60), fechado_em, fechado_por (FK usuario), observacoes, versao | A constraint `ck_importacao_fechamento` exige valor_fatura > 0 e numero_fatura preenchido quando o status é FECHADO. Taxas USD/CNY ficam explícitas conforme os requisitos. Para outras moedas usar `importacao_taxa_cambio` |
 | `importacao_taxa_cambio` | importacao_id, moeda_codigo, taxa | Generalização para moedas futuras (opcional no MVP) |
 | `importacao_aliquota_override` | id, importacao_id, imposto_id, percentual, justificativa | Exceções por processo |
 | `importacao_item` (fase 2) | id, importacao_id, ncm_codigo, descricao, quantidade, valor_moeda | Para alíquotas por NCM / adições |
 
-Status do processo: `RASCUNHO → CALCULADO → (PROVISIONADO*) → REALIZADO (fase 2)`, e `CANCELADO` a partir de qualquer status anterior a REALIZADO.
+Status do processo: `RASCUNHO → CALCULADO → FECHADO → (PROVISIONADO*) → REALIZADO (fase 2)`, e `CANCELADO` a partir de RASCUNHO ou CALCULADO (processo FECHADO não é cancelado nem recalculado).
 (*) PROVISIONADO = incluído em competência fechada.
+
+FECHADO é o fechamento da despesa de um processo (valor e número da fatura, RN23). É diferente do fechamento de competência mensal (tabela `competencia`, R1). O processo FECHADO continua na provisão viva. A auditoria do fechamento vem do trigger genérico da tabela `importacao`.
 
 ### 2.5 Cálculo e provisão
 

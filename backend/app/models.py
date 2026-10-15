@@ -9,6 +9,7 @@ from decimal import Decimal
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -232,6 +233,11 @@ class Importacao(Base):
             unique=True,
             postgresql_where=text("numero_ip IS NOT NULL"),
         ),
+        CheckConstraint(
+            "status <> 'FECHADO' OR (valor_fatura > 0 AND numero_fatura IS NOT NULL "
+            "AND numero_fatura <> '')",
+            name="ck_importacao_fechamento",
+        ),
     )
     id: Mapped[uuid.UUID] = _uuid_pk()
     numero: Mapped[int] = mapped_column(Integer, Identity(start=1), unique=True)
@@ -258,9 +264,14 @@ class Importacao(Base):
     )
     despachante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("despachante.id"))
     terminal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("terminal.id"))
+    # RASCUNHO | CALCULADO | FECHADO | CANCELADO
     status: Mapped[str] = mapped_column(String(20), default="RASCUNHO")
     calculo_desatualizado: Mapped[bool] = mapped_column(Boolean, default=False)
     motivo_cancelamento: Mapped[str | None] = mapped_column(String(300))
+    valor_fatura: Mapped[Decimal | None] = mapped_column(Dinheiro)
+    numero_fatura: Mapped[str | None] = mapped_column(String(60))
+    fechado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fechado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario.id"))
     observacoes: Mapped[str | None] = mapped_column(Text)
     versao: Mapped[int] = mapped_column(Integer, default=1)
     criado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario.id"))
@@ -275,12 +286,17 @@ class Importacao(Base):
     )
     despachante: Mapped[Despachante | None] = relationship(lazy="joined")
     terminal: Mapped[Terminal | None] = relationship(lazy="joined")
+    fechador: Mapped[Usuario | None] = relationship(foreign_keys=[fechado_por], lazy="joined")
 
     __mapper_args__ = {"version_id_col": versao, "eager_defaults": True}
 
     @property
     def numero_processo(self) -> str:
         return f"IMP-{self.numero:05d}"
+
+    @property
+    def fechado_por_nome(self) -> str | None:
+        return self.fechador.nome if self.fechador else None
 
     @property
     def data_referencia(self) -> date | None:

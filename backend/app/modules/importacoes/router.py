@@ -16,6 +16,7 @@ from app.modules.importacoes.schemas import (
     CalculoResumo,
     CalculoSaida,
     Cancelamento,
+    FechamentoDespesa,
     ImportacaoAtualizacao,
     ImportacaoDetalhe,
     ImportacaoEntrada,
@@ -47,7 +48,7 @@ def listar(
     q: str | None = None,
     tipo: str | None = None,
     status_: Annotated[
-        Literal["RASCUNHO", "CALCULADO", "CANCELADO", "DESATUALIZADO"] | None,
+        Literal["RASCUNHO", "CALCULADO", "FECHADO", "CANCELADO", "DESATUALIZADO"] | None,
         Query(alias="status"),
     ] = None,
     de: date | None = None,
@@ -99,6 +100,13 @@ def atualizar(importacao_id: UUID, dados: ImportacaoAtualizacao, db: DB, _: Edit
 @router.post("/{importacao_id}/cancelar", response_model=ImportacaoDetalhe)
 def cancelar(importacao_id: UUID, dados: Cancelamento, db: DB, _: Editar):
     imp = service.cancelar(db, service.obter(db, importacao_id), dados.motivo)
+    db.commit()
+    return _detalhe(db, imp)
+
+
+@router.post("/{importacao_id}/fechar", response_model=ImportacaoDetalhe)
+def fechar(importacao_id: UUID, dados: FechamentoDespesa, db: DB, usuario: Editar):
+    imp = service.fechar(db, service.obter(db, importacao_id), dados, usuario)
     db.commit()
     return _detalhe(db, imp)
 

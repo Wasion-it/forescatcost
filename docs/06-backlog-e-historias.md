@@ -35,6 +35,7 @@ Prioridade MoSCoW: M = Must, S = Should, C = Could. Estimativa em pontos (Fibona
 | B10 | Cadastro e edição de importação com validações | E04 | M | 8 |
 | B11 | Lista de importações com filtros e paginação | E04 | M | 5 |
 | B12 | Cancelamento de importação | E04 | M | 2 |
+| B36 | Fechamento da despesa do processo (valor e número da fatura) | E04 | M | 3 |
 | B13 | Avaliador seguro de expressões com Decimal | E05 | M | 8 |
 | B14 | Pipeline de cálculo (ordenação, conversão, componentes, competência) | E05 | M | 13 |
 | B15 | Golden tests com processos reais das planilhas | E05 | M | 8 |

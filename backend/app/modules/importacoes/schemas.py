@@ -66,6 +66,21 @@ class ImportacaoAtualizacao(ImportacaoEntrada):
     versao: int
 
 
+class FechamentoDespesa(BaseModel):
+    versao: int
+    valor_fatura: Annotated[Decimal, Field(gt=0, max_digits=16, decimal_places=2)]
+    numero_fatura: str = Field(min_length=1, max_length=60)
+
+    @field_validator("numero_fatura", mode="before")
+    @classmethod
+    def _apara_numero(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("Informe o número da fatura")
+        return v
+
+
 class Cancelamento(BaseModel):
     motivo: str = Field(min_length=5, max_length=300)
 
@@ -160,6 +175,10 @@ class ImportacaoDetalhe(ImportacaoEntrada):
     status: str
     calculo_desatualizado: bool
     motivo_cancelamento: str | None
+    valor_fatura: Decimal | None = None
+    numero_fatura: str | None = None
+    fechado_em: datetime | None = None
+    fechado_por_nome: str | None = None
     versao: int
     criado_em: datetime
     atualizado_em: datetime

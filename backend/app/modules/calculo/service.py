@@ -59,6 +59,8 @@ def entradas_de(imp: Importacao) -> Entradas:
 def executar(db: Session, imp: Importacao, data_parametros: date | None = None) -> Execucao:
     if imp.status == "CANCELADO":
         raise ErroNegocio("Processo cancelado não pode ser calculado")
+    if imp.status == "FECHADO":
+        raise ErroNegocio("Processo fechado não pode ser calculado")
     data_parametros = data_parametros or date.today()
     entradas = entradas_de(imp)
     pares = carregar_componentes(db, data_parametros)

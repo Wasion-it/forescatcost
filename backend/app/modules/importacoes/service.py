@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +17,11 @@ from app.models import (
     Transportadora,
     Usuario,
 )
-from app.modules.importacoes.schemas import ImportacaoAtualizacao, ImportacaoEntrada
+from app.modules.importacoes.schemas import (
+    FechamentoDespesa,
+    ImportacaoAtualizacao,
+    ImportacaoEntrada,
+)
 
 CAMPOS_EDITAVEIS = [campo for campo in ImportacaoEntrada.model_fields if campo not in {"versao"}]
 
@@ -74,14 +78,16 @@ def obter(db: Session, importacao_id: uuid.UUID) -> Importacao:
     return imp
 
 
+MSG_CONFLITO = "Outra pessoa alterou este processo. Recarregue a página para ver a versão atual."
+
+
 def atualizar(db: Session, imp: Importacao, dados: ImportacaoAtualizacao) -> Importacao:
     if imp.status == "CANCELADO":
         raise ErroNegocio("Processo cancelado não pode ser editado")
+    if imp.status == "FECHADO":
+        raise ErroNegocio("Processo fechado não pode ser editado")
     if dados.versao != imp.versao:
-        raise ErroNegocio(
-            "Outra pessoa alterou este processo. Recarregue a página para ver a versão atual.",
-            status=409,
-        )
+        raise ErroNegocio(MSG_CONFLITO, status=409)
     _validar_referencias(db, dados)
     _verificar_duplicidade(db, dados, imp.id)
     novos = dados.model_dump(exclude={"versao"})
@@ -97,8 +103,30 @@ def atualizar(db: Session, imp: Importacao, dados: ImportacaoAtualizacao) -> Imp
 def cancelar(db: Session, imp: Importacao, motivo: str) -> Importacao:
     if imp.status == "CANCELADO":
         raise ErroNegocio("O processo já está cancelado")
+    if imp.status == "FECHADO":
+        raise ErroNegocio("Processo fechado não pode ser cancelado")
     imp.status = "CANCELADO"
     imp.motivo_cancelamento = motivo.strip()
+    db.flush()
+    return imp
+
+
+def fechar(db: Session, imp: Importacao, dados: FechamentoDespesa, usuario: Usuario) -> Importacao:
+    if dados.versao != imp.versao:
+        raise ErroNegocio(MSG_CONFLITO, status=409)
+    if imp.status == "FECHADO":
+        raise ErroNegocio("A despesa já está fechada")
+    if imp.status == "CANCELADO":
+        raise ErroNegocio("Processo cancelado não pode ser fechado")
+    if imp.status == "RASCUNHO":
+        raise ErroNegocio("Calcule o processo antes de fechar a despesa")
+    if imp.calculo_desatualizado:
+        raise ErroNegocio("Recalcule o processo antes de fechar a despesa")
+    imp.valor_fatura = dados.valor_fatura
+    imp.numero_fatura = dados.numero_fatura
+    imp.status = "FECHADO"
+    imp.fechado_em = datetime.now(UTC)
+    imp.fechador = usuario  # grava fechado_por e mantém fechado_por_nome atualizado
     db.flush()
     return imp
 

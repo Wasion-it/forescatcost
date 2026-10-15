@@ -45,6 +45,7 @@ flowchart LR
     T05 -->|Simular| T07[T07 Simulação]
     T05 -->|Editar| T04
     T05 -->|Cancelar processo| T05
+    T05 -->|Fechar despesa| T05
 
     FIN --> T08[T08 Provisão mensal]
     FIN --> T09[T09 Provisão por IP]
@@ -106,7 +107,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 ### T05: Detalhe da importação
 ```
 ┌─ IMP-0142 · IP-26-0001      · Industrialização · Marítimo ── [Calculado] ─┐
-│ [Editar] [Recalcular] [Simular] [Cancelar processo] [Exportar]            │
+│ [Editar] [Recalcular] [Simular] [Fechar despesa] [Cancelar] [Exportar]    │
 ├───────────────────────────────────────────────────────────────────────────┤
 │ [Resumo] [Memória de cálculo] [Versões (3)] [Auditoria]                   │
 ├───────────────────────────────────────────────────────────────────────────┤
@@ -123,6 +124,8 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 Ao clicar em um componente, abre o painel lateral com a fórmula, as variáveis, a origem dos parâmetros e a vigência.
+
+"Fechar despesa" abre um diálogo com valor da fatura e número da fatura (ambos obrigatórios) e só aparece para processo calculado e sem recálculo pendente. Depois do fechamento, o status vira "Fechado", os botões Editar, Recalcular e Cancelar processo somem e o detalhe mostra a fatura, a data e quem fechou. Isso é o fechamento da despesa do processo, diferente do fechamento de competência (T11).
 
 ### T07: Simulação
 ```

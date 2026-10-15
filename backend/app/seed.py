@@ -205,7 +205,7 @@ def seed_base(db: Session) -> None:
 def seed_exemplos(db: Session) -> None:
     from app.modules.calculo import service as calculo
     from app.modules.importacoes import service as importacoes
-    from app.modules.importacoes.schemas import ImportacaoEntrada
+    from app.modules.importacoes.schemas import FechamentoDespesa, ImportacaoEntrada
 
     if db.scalar(select(ComponenteCusto.id).limit(1)) is None:
         raise RuntimeError("Carregue os dados base antes dos exemplos")
@@ -236,7 +236,8 @@ def seed_exemplos(db: Session) -> None:
         (base(numero_ip="IP-26-0001", data_ip=date(2026, 8, 5),
               tipo_importacao_id=tipo["INDUSTRIALIZACAO"], valor_invoice=D("182000"), valor_frete=D("6400"),
               qtd_itens=14, qtd_containers=2, peso_bruto_kg=D("18400"), peso_liquido_kg=D("17100"),
-              valor_taxa_liberacao=D(350), observacoes="Placas eletrônicas para linha de montagem"), "calcular"),
+              valor_taxa_liberacao=D(350), observacoes="Placas eletrônicas para linha de montagem"),
+         "calcular_e_fechar"),
         (base(numero_ip="IP-26-0002", data_ip=date(2026, 8, 21),
               tipo_importacao_id=tipo["USO_CONSUMO"], valor_invoice=D("38500"), valor_frete=D("2900"),
               qtd_itens=6, qtd_containers=1, peso_bruto_kg=D("4200"), peso_liquido_kg=D("3900"),
@@ -285,11 +286,23 @@ def seed_exemplos(db: Session) -> None:
         if acao == "cancelar":
             importacoes.cancelar(db, imp, "Pedido cancelado pelo fornecedor")
             continue
-        calculo.registrar(db, imp, None, pcm)
+        vigente = calculo.registrar(db, imp, None, pcm)
         if acao == "calcular_e_editar":
             imp.taxa_cny = D("0.7598")
             imp.calculo_desatualizado = True
             db.flush()
+        if acao == "calcular_e_fechar":
+            db.refresh(imp)
+            importacoes.fechar(
+                db,
+                imp,
+                FechamentoDespesa(
+                    versao=imp.versao,
+                    valor_fatura=vigente.total_provisionado + D("120.50"),
+                    numero_fatura="FT-2026/0412",
+                ),
+                pcm,
+            )
     print(f"{len(exemplos)} processos de exemplo carregados.")
 
 

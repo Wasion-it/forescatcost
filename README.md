@@ -55,6 +55,7 @@ npm run build            # typecheck + build
 ## O que o MVP entrega
 
 - Cadastro, edição (com controle de concorrência), consulta e cancelamento de processos (com número e data da IP, ou só data prevista).
+- Fechamento da despesa por processo: o PCM informa valor e número da fatura (`POST /api/v1/importacoes/{id}/fechar`) e o processo passa a FECHADO (sem edição, recálculo ou cancelamento, e segue na provisão). Não é o fechamento de competência mensal, que continua pendente (R1).
 - Motor de cálculo puro com fórmulas versionadas em banco e avaliador seguro (sem `eval`), aritmética `Decimal` e regra de competência do dia 15.
 - Cada cálculo é uma versão imutável, com memória por componente, snapshot de entradas e parâmetros e hash de integridade. O recálculo exige motivo.
 - Parâmetros e alíquotas com vigência (sem sobreposição, garantida por constraint no PostgreSQL) e valores por escopo (tipo de importação, transportadora, terminal).

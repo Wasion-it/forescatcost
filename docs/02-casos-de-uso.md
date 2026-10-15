@@ -75,9 +75,26 @@ Fluxos alternativos:
 - 4b. Moeda sem taxa informada: bloqueia e destaca o campo.
 - 6a. Falta parâmetro vigente para algum componente: salva como RASCUNHO e lista as pendências.
 
+### UC22: Fechar a despesa do processo
+- Ator: Analista PCM (`importacao:editar`)
+- Pré-condições: processo CALCULADO, sem recálculo pendente. Não confundir com o fechamento de competência (UC18).
+- Pós-condição: processo FECHADO, com valor da fatura, número da fatura, data/hora e usuário do fechamento, e auditoria da alteração (RN23).
+
+Fluxo principal:
+1. No detalhe do processo, o usuário aciona "Fechar despesa".
+2. O usuário informa o valor da fatura (maior que zero, 2 casas) e o número da fatura (até 60 caracteres).
+3. O sistema valida os campos e a versão do processo (controle otimista).
+4. O sistema grava o fechamento e o processo passa a FECHADO. A provisão não muda.
+
+Fluxos alternativos:
+- 3a. Processo em rascunho: orienta a calcular antes. Com recálculo pendente: orienta a recalcular antes.
+- 3b. Processo já fechado ou cancelado: bloqueia.
+- 3c. Outra pessoa alterou o processo (versão diferente): bloqueia e pede para recarregar.
+- Depois de fechado, o processo não pode ser editado, recalculado nem cancelado.
+
 ### UC06: Calcular / recalcular importação
 - Ator: Analista PCM (ou Agendador, em lote)
-- Pré-condições: processo não cancelado. Competência não fechada (RN17).
+- Pré-condições: processo não cancelado e não fechado (UC22). Competência não fechada (RN17).
 - Pós-condição: nova versão de cálculo vigente, anterior preservada (RN13).
 
 Fluxo principal:
@@ -149,7 +166,7 @@ Alternativo:
 | UC01 Autenticar | Login via SSO (OIDC). Perfis mapeados por grupos do AD ou atribuídos no sistema | RNF03 |
 | UC03 Editar importação | Igual ao UC02, com controle de versão otimista. Alterações em processo calculado sinalizam "cálculo desatualizado" | RN17 |
 | UC04 Consultar | Lista com filtros, ordenação, paginação e indicadores de status | – |
-| UC05 Cancelar | Exige motivo. Remove da provisão | RN16 |
+| UC05 Cancelar | Exige motivo. Remove da provisão. Não cancela processo FECHADO | RN16, RN23 |
 | UC08 Histórico de cálculos | Lista versões com usuário, data, motivo e total. Comparação entre duas versões | RN13 |
 | UC09 Manter parâmetros | Novo valor cria nova vigência e encerra a anterior. Não há edição retroativa sem permissão especial | RN14 |
 | UC10 Manter alíquotas | Por imposto, tipo de importação e (opcional) NCM. Origem manual/TecWin | RN03 |
