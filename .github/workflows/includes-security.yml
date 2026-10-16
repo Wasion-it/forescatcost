@@ -1,0 +1,69 @@
+name: Validação de segurança
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: DevSecOps - dependências, código e secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Configurar uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Auditoria de dependências Python
+        working-directory: backend
+        shell: bash
+        run: |
+          uv export --frozen --no-dev --no-hashes -o /tmp/forecast-requirements.txt
+          uvx pip-audit -r /tmp/forecast-requirements.txt --vulnerability-service osv --progress-spinner off
+
+      - name: Auditoria de dependências frontend
+        working-directory: frontend
+        shell: bash
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Análise estática Python com Bandit
+        working-directory: backend
+        shell: bash
+        run: uvx bandit -r app -ll --exit-zero
+
+      - name: Trivy - secrets e vulnerabilidades do repositório
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Resumo DevSecOps
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo '## DevSecOps - Forecast'
+            echo ''
+            echo '- Dependências Python: pip-audit via uv export'
+            echo '- Dependências frontend: npm audit'
+            echo '- SAST Python: Bandit (visibilidade, sem bloquear nesta fase)'
+            echo '- Secrets/vulnerabilidades do repositório: Trivy'
+            echo '- Gate: vulnerabilidades CRITICAL e secrets detectados pelo Trivy'
+          } >> "$GITHUB_STEP_SUMMARY"
