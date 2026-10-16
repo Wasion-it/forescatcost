@@ -1,0 +1,41 @@
+name: Preparar ambiente
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Ambiente de execução
+        required: false
+        type: string
+        default: none
+    outputs:
+      project:
+        description: Nome do projeto
+        value: ${{ jobs.environment.outputs.project }}
+      environment:
+        description: Ambiente de execução
+        value: ${{ jobs.environment.outputs.environment }}
+      python_version:
+        description: Versão do Python
+        value: ${{ jobs.environment.outputs.python_version }}
+      node_version:
+        description: Versão do Node.js
+        value: ${{ jobs.environment.outputs.node_version }}
+
+jobs:
+  environment:
+    runs-on: ubuntu-latest
+    outputs:
+      project: ${{ steps.meta.outputs.project }}
+      environment: ${{ steps.meta.outputs.environment }}
+      python_version: ${{ steps.meta.outputs.python_version }}
+      node_version: ${{ steps.meta.outputs.node_version }}
+    steps:
+      - name: Definir metadados do projeto
+        id: meta
+        shell: bash
+        run: |
+          echo "project=Forecast de Importação" >> "$GITHUB_OUTPUT"
+          echo "environment=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          echo "python_version=3.13" >> "$GITHUB_OUTPUT"
+          echo "node_version=22" >> "$GITHUB_OUTPUT"
