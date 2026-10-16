@@ -7,8 +7,28 @@ from app.calculo.engine import Componente, RegraCompetencia
 
 R = RegraCompetencia
 
+# Taxa de utilização do Siscomex (Portaria ME 4.131/2021): valor por DI/Duimp mais um valor
+# por adição, decrescente por faixa (1ª-2ª, 3ª-5ª, 6ª-10ª, 11ª-20ª, 21ª-50ª, 51ª em diante).
+# Como é provisão, o nº de adições ainda não existe: usa-se qtd_itens como estimativa
+# (adições ≤ itens, então a estimativa é conservadora). Se o usuário informar o valor real
+# (`siscomex` > 0), ele prevalece sobre o cálculo.
+FORMULA_TAXA_SISCOMEX = (
+    "se(siscomex > 0, siscomex, "
+    "p.siscomex_registro "
+    "+ min(qtd_itens, 2) * p.siscomex_adicao_faixa1 "
+    "+ max(min(qtd_itens, 5) - 2, 0) * p.siscomex_adicao_faixa2 "
+    "+ max(min(qtd_itens, 10) - 5, 0) * p.siscomex_adicao_faixa3 "
+    "+ max(min(qtd_itens, 20) - 10, 0) * p.siscomex_adicao_faixa4 "
+    "+ max(min(qtd_itens, 50) - 20, 0) * p.siscomex_adicao_faixa5 "
+    "+ max(qtd_itens - 50, 0) * p.siscomex_adicao_faixa6)"
+)
+# CIF = valor aduaneiro (FOB + frete), como na DI. A Taxa Siscomex não integra o valor aduaneiro:
+# fica fora da base de II, IPI, PIS, COFINS, armazenagem e transporte, e entra só na base do ICMS.
+FORMULA_CIF = "invoice_brl + frete_brl"
+FORMULA_ICMS = "(cif + taxa_siscomex + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms"
+
 COMPONENTES_PADRAO: list[Componente] = [
-    Componente("CIF", "CIF", "invoice_brl + frete_brl + siscomex", False, R.MES_REFERENCIA, 10),
+    Componente("CIF", "CIF", FORMULA_CIF, False, R.MES_REFERENCIA, 10),
     Componente(
         "II",
         "Imposto de Importação",
@@ -27,15 +47,8 @@ COMPONENTES_PADRAO: list[Componente] = [
     ),
     Componente("PIS", "PIS importação", "cif * aliq.pis", True, R.MES_REFERENCIA, 40),
     Componente("COFINS", "COFINS importação", "cif * aliq.cofins", True, R.MES_REFERENCIA, 50),
-    Componente("TAXA_SISCOMEX", "Taxa Siscomex", "siscomex", True, R.MES_REFERENCIA, 60),
-    Componente(
-        "ICMS",
-        "ICMS",
-        "(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms",
-        True,
-        R.MES_REFERENCIA,
-        70,
-    ),
+    Componente("TAXA_SISCOMEX", "Taxa Siscomex", FORMULA_TAXA_SISCOMEX, True, R.MES_REFERENCIA, 60),
+    Componente("ICMS", "ICMS", FORMULA_ICMS, True, R.MES_REFERENCIA, 70),
     Componente(
         "TCIF",
         "TCIF (SUFRAMA)",

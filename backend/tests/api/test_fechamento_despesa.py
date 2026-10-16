@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.db import SessionLocal
 
 _seq = count(500)
-FECHAMENTO = {"valor_fatura": "61234.56", "numero_fatura": "FT-2026/0412"}
+FECHAMENTO = {"numero_fatura": "FT-2026/0412"}
 
 
 @pytest.fixture
@@ -51,19 +51,40 @@ def _calculado(client, headers, payload):
     return client.get(f"/api/v1/importacoes/{imp['id']}", headers=headers).json()
 
 
+def _itens_despesa(imp):
+    """Itens do cálculo vigente que compõem a despesa (um valor realizado por item)."""
+    calculo = imp["calculo_vigente"] or {"itens": []}  # rascunho ainda não tem cálculo
+    return [i for i in calculo["itens"] if i["compoe_provisao"]]
+
+
+def _despesas(imp, acrescimo="10.00"):
+    """Realizado = provisionado + acréscimo em cada item."""
+    return [
+        {
+            "componente_codigo": i["componente_codigo"],
+            "valor": str(Decimal(i["valor"]) + Decimal(acrescimo)),
+        }
+        for i in _itens_despesa(imp)
+    ]
+
+
 def _fechar(client, headers, imp, **campos):
-    corpo = {"versao": imp["versao"], **FECHAMENTO, **campos}
+    corpo = {"versao": imp["versao"], "despesas": _despesas(imp), **FECHAMENTO, **campos}
     corpo = {k: v for k, v in corpo.items() if v is not ...}
     return client.post(f"/api/v1/importacoes/{imp['id']}/fechar", json=corpo, headers=headers)
 
 
 def test_fechamento_valido(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
+    itens = _itens_despesa(imp)
+    assert len(itens) > 1
     r = _fechar(client, pcm, imp, numero_fatura="  FT-2026/0412  ")
     assert r.status_code == 200, r.text
     corpo = r.json()
     assert corpo["status"] == "FECHADO"
-    assert corpo["valor_fatura"] == "61234.56"
+    # o total da despesa é a soma dos itens informados
+    esperado = sum((Decimal(i["valor"]) + Decimal("10.00") for i in itens), Decimal(0))
+    assert Decimal(corpo["valor_fatura"]) == esperado
     assert corpo["numero_fatura"] == "FT-2026/0412"  # espaços aparados
     assert corpo["fechado_por_nome"] == "Analista PCM"
     assert corpo["fechado_em"]
@@ -73,16 +94,36 @@ def test_fechamento_valido(client, pcm, payload):
     detalhe = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
     assert detalhe["status"] == "FECHADO"
     assert detalhe["numero_fatura"] == "FT-2026/0412"
+    # cada item volta com provisionado e realizado, na ordem do cálculo
+    fechadas = detalhe["despesas_fechadas"]
+    assert [d["componente_codigo"] for d in fechadas] == [i["componente_codigo"] for i in itens]
+    for d, i in zip(fechadas, itens, strict=True):
+        assert Decimal(d["provisionado"]) == Decimal(i["valor"])
+        assert Decimal(d["valor"]) == Decimal(i["valor"]) + Decimal("10.00")
+
+
+def test_valor_por_item_pode_ser_zero(client, pcm, payload):
+    imp = _calculado(client, pcm, payload)
+    despesas = _despesas(imp)
+    despesas[0]["valor"] = "0.00"
+    r = _fechar(client, pcm, imp, despesas=despesas)
+    assert r.status_code == 200, r.text
+    assert Decimal(r.json()["despesas_fechadas"][0]["valor"]) == 0
 
 
 def test_fatura_invalida(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
+    despesas = _despesas(imp)
     invalidos = [
-        {"valor_fatura": ...},
-        {"valor_fatura": "0"},
-        {"valor_fatura": "0.00"},
-        {"valor_fatura": "-10.00"},
-        {"valor_fatura": "100.123"},
+        {"despesas": ...},
+        {"despesas": []},
+        {"despesas": [{**despesas[0], "valor": "-10.00"}, *despesas[1:]]},
+        {"despesas": [{**despesas[0], "valor": "100.123"}, *despesas[1:]]},
+        {"despesas": [{"componente_codigo": despesas[0]["componente_codigo"]}, *despesas[1:]]},
+        {"despesas": [*despesas, despesas[0]]},  # item repetido
+        {"despesas": despesas[1:]},  # falta um item
+        {"despesas": [*despesas, {"componente_codigo": "INEXISTENTE", "valor": "1.00"}]},
+        {"despesas": [{**d, "valor": "0.00"} for d in despesas]},  # total zerado
         {"numero_fatura": ...},
         {"numero_fatura": ""},
         {"numero_fatura": "   "},
@@ -94,11 +135,20 @@ def test_fatura_invalida(client, pcm, payload):
     detalhe = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
     assert detalhe["status"] == "CALCULADO"
     assert detalhe["valor_fatura"] is None
+    assert detalhe["despesas_fechadas"] == []
+
+
+def test_item_faltante_informa_qual(client, pcm, payload):
+    imp = _calculado(client, pcm, payload)
+    r = _fechar(client, pcm, imp, despesas=_despesas(imp)[1:])
+    assert r.status_code == 422
+    nome = _itens_despesa(imp)[0]["componente_nome"]
+    assert f"Informe o valor de {nome}" in r.json()["problemas"]
 
 
 def test_rascunho_nao_fecha(client, pcm, payload):
     imp = _criar(client, pcm, payload)
-    r = _fechar(client, pcm, imp)
+    r = _fechar(client, pcm, imp, despesas=[{"componente_codigo": "II", "valor": "1.00"}])
     assert r.status_code == 422
     assert "Calcule o processo" in r.json()["detail"]
 

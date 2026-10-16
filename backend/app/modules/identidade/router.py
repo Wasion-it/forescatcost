@@ -1,17 +1,20 @@
-"""Autenticação local (MVP) e gestão de usuários. SSO OIDC previsto no roadmap."""
+"""Autenticação (LDAP/AD + conta local de administrador) e gestão de usuários."""
 
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.deps import Permissoes, exigir, usuario_atual
 from app.core.erros import ErroNegocio
+from app.core.ldap import IdentidadeLdap, LdapIndisponivel, autenticar
 from app.core.security import criar_token, gerar_hash_senha, verificar_senha
 from app.models import Perfil, Usuario
 
@@ -32,7 +35,17 @@ Email = Annotated[
 
 
 class Login(BaseModel):
-    email: Email
+    """`usuario` aceita o e-mail (contas locais) ou o sAMAccountName (LDAP).
+
+    O alias `email` mantém compatibilidade com clientes anteriores.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+    usuario: str = Field(
+        min_length=1,
+        max_length=160,
+        validation_alias=AliasChoices("usuario", "email"),
+    )
     senha: str = Field(min_length=1, max_length=128)
 
 
@@ -68,12 +81,78 @@ class UsuarioEntrada(BaseModel):
     perfis: list[str] = Field(min_length=1, description="Códigos dos perfis")
 
 
+def _credencial_invalida() -> HTTPException:
+    return HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuário ou senha incorretos.")
+
+
+def _autenticar_local(db: Session, email: str, senha: str) -> Usuario | None:
+    """Conta local (ex.: administrador). Confere o hash mesmo se o e-mail não existir."""
+    usuario = db.scalar(
+        select(Usuario).where(func.lower(Usuario.email) == email, Usuario.origem == "LOCAL")
+    )
+    senha_ok = verificar_senha(senha, usuario.senha_hash if usuario else _HASH_FALSO)
+    return usuario if usuario is not None and senha_ok else None
+
+
+def _usuario_ldap(db: Session, identidade: IdentidadeLdap) -> Usuario:
+    """Localiza o usuário do diretório; cria o cadastro na primeira entrada (perfil padrão)."""
+    usuario = db.scalar(select(Usuario).where(Usuario.login_ldap == identidade.login))
+    if usuario is not None:
+        if usuario.nome != identidade.nome[:120]:
+            usuario.nome = identidade.nome[:120]
+        return usuario
+
+    email = (identidade.email or f"{identidade.login}@ldap.local")[:160]
+    if db.scalar(select(Usuario.id).where(func.lower(Usuario.email) == email)):
+        # Nunca vincula automaticamente a uma conta existente (evita tomada de conta local)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Já existe uma conta com este e-mail. Procure o administrador do sistema.",
+        )
+    perfil = db.scalar(select(Perfil).where(Perfil.codigo == get_settings().ldap_perfil_padrao))
+    if perfil is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Perfil padrão do LDAP não configurado. Procure o administrador do sistema.",
+        )
+    usuario = Usuario(
+        nome=identidade.nome[:120],
+        email=email,
+        senha_hash=None,
+        origem="LDAP",
+        login_ldap=identidade.login,
+        perfis=[perfil],
+    )
+    db.add(usuario)
+    try:
+        db.flush()
+    except IntegrityError:  # primeira entrada simultânea: usa o cadastro que venceu
+        db.rollback()
+        return db.scalars(select(Usuario).where(Usuario.login_ldap == identidade.login)).one()
+    return usuario
+
+
 @router.post("/auth/login", response_model=Sessao)
 def login(dados: Login, db: DB):
-    usuario = db.scalar(select(Usuario).where(func.lower(Usuario.email) == dados.email.lower()))
-    senha_ok = verificar_senha(dados.senha, usuario.senha_hash if usuario else _HASH_FALSO)
-    if usuario is None or not senha_ok or not usuario.ativo:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha incorretos.")
+    identificador = dados.usuario.strip().lower()
+    usuario: Usuario | None
+    if "@" in identificador:
+        # E-mail = conta local (administrador). Contas LDAP entram pelo sAMAccountName.
+        usuario = _autenticar_local(db, identificador, dados.senha)
+    elif get_settings().ldap_enabled:
+        try:
+            identidade = autenticar(identificador, dados.senha)
+        except LdapIndisponivel:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Não foi possível consultar o diretório. Tente novamente ou use uma conta local.",
+            ) from None
+        usuario = _usuario_ldap(db, identidade) if identidade else None
+    else:
+        verificar_senha(dados.senha, _HASH_FALSO)  # tempo de resposta uniforme
+        usuario = None
+    if usuario is None or not usuario.ativo:
+        raise _credencial_invalida()
     usuario.ultimo_acesso = datetime.now(UTC)
     db.commit()
     token, expira = criar_token(usuario.id)
@@ -146,7 +225,7 @@ def atualizar(usuario_id: UUID, dados: UsuarioEntrada, db: DB, admin: Gerir):
     usuario.email = dados.email.lower()
     usuario.ativo = dados.ativo
     usuario.perfis = _perfis(db, dados.perfis)
-    if dados.senha:
+    if dados.senha and usuario.origem == "LOCAL":  # usuários LDAP não têm senha local
         usuario.senha_hash = gerar_hash_senha(dados.senha)
     db.commit()
     return usuario

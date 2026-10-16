@@ -116,7 +116,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 │ II                      │ 213.975,03   │ 0,00%       │       0,00 │ 10/26 │
 │ PIS                     │ 213.975,03   │ x,xx%       │   x.xxx,xx │ 10/26 │
 │ ...                     │              │             │            │       │
-│ TCIF                    │ 12 itens     │ 45 + 245    │     785,00 │ 11/26 │
+│ TCIF                    │ 12 itens     │ 45 + 250    │     790,00 │ 11/26 │
 │ Transporte local        │ 2 cont.      │ 1.500+0,06% │   3.128,39 │ 10/26 │
 │ Despachante             │ 1 IP         │ Industr.    │     715,00 │ 10/26 │
 ├─────────────────────────┴──────────────┴─────────────┴────────────┴───────┤
@@ -125,7 +125,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 ```
 Ao clicar em um componente, abre o painel lateral com a fórmula, as variáveis, a origem dos parâmetros e a vigência.
 
-"Fechar despesa" abre um diálogo com valor da fatura e número da fatura (ambos obrigatórios) e só aparece para processo calculado e sem recálculo pendente. Depois do fechamento, o status vira "Fechado", os botões Editar, Recalcular e Cancelar processo somem e o detalhe mostra a fatura, a data e quem fechou. Isso é o fechamento da despesa do processo, diferente do fechamento de competência (T11).
+"Fechar despesa" abre um diálogo com o número da fatura e uma tabela com o valor realizado de cada item da despesa (provisionado ao lado, todos obrigatórios, com o total e a diferença para a provisão) e só aparece para processo calculado e sem recálculo pendente. Depois do fechamento, o status vira "Fechado", os botões Editar, Recalcular e Cancelar processo somem e o detalhe mostra a fatura, a data e quem fechou. Na lateral, versões do cálculo e alterações ficam em um único painel de histórico com abas (cada lista rola dentro do painel, com altura máxima). A fita de cálculo ganha, ao lado de cada item, as colunas Realizado e Diferença (realizado menos provisionado), com subtotais por grupo e o total realizado no rodapé. Isso é o fechamento da despesa do processo, diferente do fechamento de competência (T11).
 
 ### T07: Simulação
 ```

@@ -120,7 +120,7 @@ def test_aliquotas_e_componentes(client, pcm):
     assert {ln["imposto"]["codigo"] for ln in a["linhas"]} >= {"II", "ICMS"}
     comps = client.get("/api/v1/componentes", headers=pcm).json()
     assert comps[0]["codigo"] == "CIF"
-    assert comps[0]["formula"]["expressao"] == "invoice_brl + frete_brl + siscomex"
+    assert comps[0]["formula"]["expressao"] == "invoice_brl + frete_brl"
 
 
 def test_gestao_de_usuarios(client, admin, pcm):

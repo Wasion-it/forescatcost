@@ -82,7 +82,7 @@ Fluxos alternativos:
 
 Fluxo principal:
 1. No detalhe do processo, o usuário aciona "Fechar despesa".
-2. O usuário informa o valor da fatura (maior que zero, 2 casas) e o número da fatura (até 60 caracteres).
+2. O usuário informa o valor realizado de cada item da despesa (zero ou mais, 2 casas; o total deve ser maior que zero) e o número da fatura (até 60 caracteres).
 3. O sistema valida os campos e a versão do processo (controle otimista).
 4. O sistema grava o fechamento e o processo passa a FECHADO. A provisão não muda.
 

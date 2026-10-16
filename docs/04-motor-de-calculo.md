@@ -15,7 +15,7 @@ flowchart TD
     CIF --> COFINS[COFINS]
     II --> IPI[IPI]
     E --> SISC[Taxa Siscomex]
-    CIF & II & IPI & PIS & COFINS --> ICMS[ICMS por dentro]
+    CIF & SISC & II & IPI & PIS & COFINS --> ICMS[ICMS por dentro]
     E --> TCIF[TCIF]
     CIF --> TL[Transporte local]
     CIF --> AM[Armazenagem marítima]
@@ -33,7 +33,7 @@ flowchart TD
 |----------|--------|
 | `invoice_brl`, `frete_brl`, `seguro_brl` | Valor × taxa da moeda (RN01) |
 | `valor_invoice`, `valor_frete`, `taxa_usd`, `taxa_cny` | Entrada |
-| `siscomex`, `valor_taxa_liberacao`, `qtd_itens`, `qtd_containers`, `peso_bruto`, `peso_liquido` | Entrada |
+| `siscomex` (valor informado; 0 = calcular), `valor_taxa_liberacao`, `qtd_itens`, `qtd_containers`, `peso_bruto`, `peso_liquido` | Entrada |
 | `modal`, `tipo_importacao` | Entrada (texto, para condições) |
 | `cif`, `ii`, `ipi`, `pis`, `cofins`, `icms`, ... | Resultado de componentes anteriores |
 | `valor_carga` | Alias configurável (padrão: `cif`), pendente de confirmação |
@@ -48,13 +48,13 @@ As fórmulas de impostos são uma proposta baseada na sistemática usual de impo
 
 | Componente | Expressão padrão | Provisão | Competência |
 |------------|------------------|----------|-------------|
-| CIF | `invoice_brl + frete_brl + siscomex` | Não (base) | – |
+| CIF | `invoice_brl + frete_brl` (valor aduaneiro, sem Siscomex) | Não (base) | – |
 | II | `se(p.ii_suspenso == 1, 0, cif * aliq.ii)` | Sim | Mês da IP |
 | IPI | `se(p.ipi_suspenso == 1, 0, (cif + ii) * aliq.ipi)` | Sim | Mês da IP |
 | PIS | `cif * aliq.pis` | Sim | Mês da IP |
 | COFINS | `cif * aliq.cofins` | Sim | Mês da IP |
-| Taxa Siscomex | `siscomex` | Sim | Mês da IP |
-| ICMS | `(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da IP |
+| Taxa Siscomex | `se(siscomex > 0, siscomex, p.siscomex_registro + <adições por faixa>)`, ver abaixo | Sim | Mês da IP |
+| ICMS | `(cif + taxa_siscomex + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da IP |
 | TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_ip` | Sim | Corte dia 15 |
 | Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da IP |
 | Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da IP |
@@ -68,19 +68,22 @@ Valores iniciais dos parâmetros:
 | Chave | Escopo | Valor inicial |
 |-------|--------|---------------|
 | `tcif_valor_item` | Global | 45,00 |
-| `tcif_valor_ip` | Global | 245,00 |
+| `tcif_valor_ip` | Global | 250,00 (Lei 13.451/2017, art. 8º, § 2º) |
 | `competencia_dia_corte` | Global | 15 |
 | `tl_valor_container` | Transportadora | a cadastrar |
 | `tl_percentual` | Transportadora | 0,0006 (0,06%) |
 | `arm_mar_pct_periodo1` | Terminal | 0,0092 (0,92%) |
 | `arm_mar_minimo` | Terminal | 0 (a confirmar) |
 | `despachante_honorario_ip` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo e Adicionar Ativo) |
+| `siscomex_registro` | Global | 115,67 (por DI/Duimp) |
+| `siscomex_adicao_faixa1` a `faixa6` | Global | 38,56 / 30,85 / 23,14 / 15,42 / 7,71 / 3,86 (por adição: 1ª-2ª, 3ª-5ª, 6ª-10ª, 11ª-20ª, 21ª-50ª, 51ª em diante) |
 | `ii_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
 | `ipi_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
 
 Atenção a estes pontos:
-- Como o CIF atual já inclui o Siscomex, a fórmula do ICMS não soma o Siscomex de novo. Se o Fiscal decidir tirar o Siscomex do CIF, as duas fórmulas mudam juntas (nova versão de ambas). O componente Taxa Siscomex (grupo de impostos) mostra o valor e compõe a provisão.
-- Com II e IPI suspensos (padrão), os dois valem 0,00 e o ICMS parte de CIF + PIS + COFINS. Com `ii_suspenso` ou `ipi_suspenso` = 0 para um tipo, a fórmula volta a calcular o imposto e o ICMS o inclui. A memória do item guarda `suspenso: true` quando a suspensão se aplica.
+- Taxa Siscomex automática: como o sistema é de provisão, o valor real ainda não existe. Se o campo "Taxa Siscomex" do processo ficar vazio (0), o motor calcula `siscomex_registro` + soma das adições por faixa (Portaria ME 4.131/2021). Se o usuário informar um valor maior que zero, ele prevalece. O número de adições é estimado por `qtd_itens` (cada adição agrupa um ou mais itens, então a estimativa é conservadora). Exemplo: 10 itens = 115,67 + 2×38,56 + 3×30,85 + 5×23,14 = 401,04. Os valores são parâmetros com vigência; se a Receita reajustar, cadastre nova vigência em Parâmetros, sem mexer na fórmula.
+- Siscomex fora do CIF: o CIF é o valor aduaneiro (FOB + frete), igual ao da DI. A Taxa Siscomex não entra na base de II, IPI, PIS, COFINS, armazenagem e transporte. Ela entra só na base do ICMS, pelo componente `taxa_siscomex` (valor informado ou calculado). Validado com a DI do IMP-00010: CIF da DI R$ 18.818,26, sem a taxa de R$ 308,48. A diferença de R$ 0,02 vem do arredondamento da conversão (a DI trunca). O componente Taxa Siscomex (grupo de impostos) mostra o valor e compõe a provisão.
+- Com II e IPI suspensos (padrão), os dois valem 0,00 e o ICMS parte de CIF + Siscomex + PIS + COFINS. Com `ii_suspenso` ou `ipi_suspenso` = 0 para um tipo, a fórmula volta a calcular o imposto e o ICMS o inclui. A memória do item guarda `suspenso: true` quando a suspensão se aplica.
 - A taxa de liberação é um componente próprio e vem do processo, nunca de um parâmetro fixo.
 - AFRMM e transporte secundário foram removidos. Os componentes ficam inativos no banco só para preservar o histórico de cálculos antigos.
 - O frete aparece no CIF (base) e no componente "Frete internacional" (desembolso). Por isso o total soma apenas itens com `compoe_provisao = true` (RN20).

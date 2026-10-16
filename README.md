@@ -22,12 +22,12 @@ uv sync
 Copy-Item .env.example .env          # ajuste se necessário
 uv run alembic upgrade head
 uv run python -m app.seed --exemplos # dados base + 9 processos de exemplo
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 
 # 3. Frontend (outro terminal)
 cd frontend
 npm install
-npm run dev                          # http://localhost:5173 (proxy /api → :8000)
+npm run dev                          # http://localhost:5173 (proxy /api → :8010)
 ```
 
 Usuários criados pelo seed (senha definida em `SEED_SENHA`, padrão `Forecast@2026!`):
@@ -38,7 +38,7 @@ Usuários criados pelo seed (senha definida em `SEED_SENHA`, padrão `Forecast@2
 | financeiro@forecast.local | Financeiro: consulta provisões e exporta |
 | admin@forecast.local | Administrador: usuários, parâmetros, auditoria |
 
-A documentação da API fica em http://localhost:8000/api/docs (desativada quando `AMBIENTE=prd`).
+A documentação da API fica em http://127.0.0.1:8010/api/docs (desativada quando `AMBIENTE=prd`).
 
 ## Testes e qualidade
 

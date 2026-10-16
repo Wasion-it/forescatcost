@@ -6,7 +6,7 @@ interface EstadoAuth {
   usuario: Usuario | null;
   permissoes: Set<string>;
   carregando: boolean;
-  entrar: (email: string, senha: string) => Promise<void>;
+  entrar: (usuario: string, senha: string) => Promise<void>;
   sair: () => void;
   pode: (permissao: string) => boolean;
 }
@@ -37,8 +37,8 @@ export function ProvedorAutenticacao({ children }: { children: ReactNode }) {
       .finally(() => setCarregando(false));
   }, [sair]);
 
-  const entrar = useCallback(async (email: string, senha: string) => {
-    const r = await api.post<Sessao>("/auth/login", { email, senha });
+  const entrar = useCallback(async (usuario: string, senha: string) => {
+    const r = await api.post<Sessao>("/auth/login", { usuario, senha });
     sessao.salvar(r.token);
     setUsuario(r.usuario);
     setPermissoes(new Set(r.permissoes));

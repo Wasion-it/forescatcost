@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -12,12 +13,14 @@ from app.models import (
     Calculo,
     Despachante,
     Importacao,
+    ImportacaoDespesa,
     Terminal,
     TipoImportacao,
     Transportadora,
     Usuario,
 )
 from app.modules.importacoes.schemas import (
+    DespesaFechada,
     FechamentoDespesa,
     ImportacaoAtualizacao,
     ImportacaoEntrada,
@@ -122,13 +125,57 @@ def fechar(db: Session, imp: Importacao, dados: FechamentoDespesa, usuario: Usua
         raise ErroNegocio("Calcule o processo antes de fechar a despesa")
     if imp.calculo_desatualizado:
         raise ErroNegocio("Recalcule o processo antes de fechar a despesa")
-    imp.valor_fatura = dados.valor_fatura
+    vigente = db.scalar(
+        select(Calculo).where(Calculo.importacao_id == imp.id, Calculo.vigente.is_(True))
+    )
+    if vigente is None:
+        raise ErroNegocio("Calcule o processo antes de fechar a despesa")
+    itens = {i.componente_codigo: i for i in vigente.itens if i.compoe_provisao}
+    informados = {d.componente_codigo: d.valor for d in dados.despesas}
+    desconhecidos = sorted(set(informados) - set(itens))
+    faltantes = [i.componente_nome for c, i in itens.items() if c not in informados]
+    if desconhecidos or faltantes:
+        problemas = [f"Informe o valor de {nome}" for nome in faltantes]
+        problemas += [
+            f"Item {codigo} não faz parte da despesa deste processo" for codigo in desconhecidos
+        ]
+        raise ErroNegocio("Informe o valor realizado de cada item da despesa", problemas=problemas)
+    total = sum(informados.values(), Decimal(0))
+    if total <= 0:
+        raise ErroNegocio("O total da despesa deve ser maior que zero")
+    for codigo, item in itens.items():
+        db.add(
+            ImportacaoDespesa(
+                importacao_id=imp.id, calculo_item_id=item.id, valor=informados[codigo]
+            )
+        )
+    imp.valor_fatura = total
     imp.numero_fatura = dados.numero_fatura
     imp.status = "FECHADO"
     imp.fechado_em = datetime.now(UTC)
     imp.fechador = usuario  # grava fechado_por e mantém fechado_por_nome atualizado
     db.flush()
     return imp
+
+
+def despesas_fechadas(db: Session, imp: Importacao) -> list[DespesaFechada]:
+    """Valores realizados por item, na ordem do cálculo (vazio se não fechada item a item)."""
+    if imp.status != "FECHADO":
+        return []
+    linhas = db.scalars(
+        select(ImportacaoDespesa).where(ImportacaoDespesa.importacao_id == imp.id)
+    ).all()
+    return [
+        DespesaFechada(
+            componente_codigo=d.item.componente_codigo,
+            componente_nome=d.item.componente_nome,
+            natureza=d.item.natureza,
+            ordem=d.item.ordem,
+            provisionado=d.item.valor,
+            valor=d.valor,
+        )
+        for d in sorted(linhas, key=lambda d: d.item.ordem)
+    ]
 
 
 def consulta_lista(

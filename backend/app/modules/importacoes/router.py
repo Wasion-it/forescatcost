@@ -38,6 +38,7 @@ def _detalhe(db: Session, imp) -> ImportacaoDetalhe:
     detalhe = ImportacaoDetalhe.model_validate(imp)
     if vigente:
         detalhe.calculo_vigente = CalculoSaida.model_validate(calculo_service.para_saida(vigente))
+    detalhe.despesas_fechadas = service.despesas_fechadas(db, imp)
     return detalhe
 
 

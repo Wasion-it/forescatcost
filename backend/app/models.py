@@ -80,7 +80,9 @@ class Usuario(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     nome: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(160), unique=True)
-    senha_hash: Mapped[str] = mapped_column(String(100))
+    senha_hash: Mapped[str | None] = mapped_column(String(100))  # nulo para origem LDAP
+    origem: Mapped[str] = mapped_column(String(10), default="LOCAL", server_default="LOCAL")
+    login_ldap: Mapped[str | None] = mapped_column(String(120), unique=True)  # sAMAccountName
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     ultimo_acesso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = _criado_em()
@@ -301,6 +303,22 @@ class Importacao(Base):
     @property
     def data_referencia(self) -> date | None:
         return self.data_ip or self.data_prevista
+
+
+class ImportacaoDespesa(Base):
+    """Valor realizado de cada item do cálculo, informado ao fechar a despesa do processo."""
+
+    __tablename__ = "importacao_despesa"
+    __table_args__ = (
+        UniqueConstraint("importacao_id", "calculo_item_id"),
+        CheckConstraint("valor >= 0", name="ck_importacao_despesa_valor"),
+    )
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    importacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("importacao.id"))
+    calculo_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("calculo_item.id"))
+    valor: Mapped[Decimal] = mapped_column(Dinheiro)
+    criado_em: Mapped[datetime] = _criado_em()
+    item: Mapped[CalculoItem] = relationship(lazy="joined")
 
 
 # --------------------------------------------------------------------------- Cálculo

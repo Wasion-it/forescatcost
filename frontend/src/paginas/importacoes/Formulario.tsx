@@ -148,7 +148,8 @@ export function FormularioImportacao() {
     };
     const invoice = num(f.valor_invoice) * taxa(f.moeda_invoice);
     const frete = num(f.valor_frete) * taxa(f.moeda_frete);
-    const cif = invoice + frete + num(f.valor_siscomex);
+    // CIF = valor aduaneiro (invoice + frete). A Taxa Siscomex fica fora e entra só no ICMS.
+    const cif = invoice + frete;
     return { invoice, frete, cif };
   }, [f]);
 
@@ -300,7 +301,11 @@ export function FormularioImportacao() {
           {campoNumero("valor_taxa_liberacao", "Taxa de liberação (R$)", "Varia a cada processo. Informe o valor cobrado.")}
           {campoNumero("taxa_usd", usaUSD ? "Taxa USD" : "Taxa USD (opcional)")}
           {campoNumero("taxa_cny", usaCNY ? "Taxa CNY" : "Taxa CNY (opcional)")}
-          {campoNumero("valor_siscomex", "Taxa Siscomex (R$)")}
+          {campoNumero(
+            "valor_siscomex",
+            "Taxa Siscomex (R$)",
+            "Deixe em branco para o sistema estimar pelo nº de itens (tabela oficial). Informe só se já souber o valor real.",
+          )}
           {f.modal === "AEREO" &&
             campoNumero("valor_armazenagem_aerea", "Armazenagem aérea (R$)", "Informada manualmente até a regra ser definida")}
           <div className="largo previa-cif" aria-live="polite">

@@ -131,6 +131,17 @@ export interface Importacao extends ImportacaoEntrada {
   despachante: RefNome | null;
   terminal: RefNome | null;
   calculo_vigente: Calculo | null;
+  /** Valor realizado de cada item, informado no fechamento (vazio em processos fechados só com o total). */
+  despesas_fechadas: DespesaFechada[];
+}
+
+export interface DespesaFechada {
+  componente_codigo: string;
+  componente_nome: string;
+  natureza: string;
+  ordem: number;
+  provisionado: Decimal;
+  valor: Decimal;
 }
 
 export interface ImportacaoResumo {

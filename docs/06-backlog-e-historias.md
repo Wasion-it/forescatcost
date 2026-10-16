@@ -92,7 +92,7 @@ Como analista do PCM, quero que a TCIF seja provisionada no mês seguinte quando
 Cenário: IP até o dia 15
   Dado uma IP com data 15/10/2026 e 10 itens
   Quando o processo é calculado
-  Então a TCIF é R$ 695,00 (10 × 45,00 + 245,00)
+  Então a TCIF é R$ 700,00 (10 × 45,00 + 250,00)
   E a competência da TCIF é 10/2026
 
 Cenário: IP após o dia 15

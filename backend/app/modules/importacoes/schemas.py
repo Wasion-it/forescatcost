@@ -66,10 +66,17 @@ class ImportacaoAtualizacao(ImportacaoEntrada):
     versao: int
 
 
+class DespesaFechamento(BaseModel):
+    """Valor realizado de um item do cálculo (identificado pelo código do componente)."""
+
+    componente_codigo: str = Field(min_length=1, max_length=30)
+    valor: Dinheiro
+
+
 class FechamentoDespesa(BaseModel):
     versao: int
-    valor_fatura: Annotated[Decimal, Field(gt=0, max_digits=16, decimal_places=2)]
     numero_fatura: str = Field(min_length=1, max_length=60)
+    despesas: list[DespesaFechamento] = Field(min_length=1)
 
     @field_validator("numero_fatura", mode="before")
     @classmethod
@@ -79,6 +86,22 @@ class FechamentoDespesa(BaseModel):
             if not v:
                 raise ValueError("Informe o número da fatura")
         return v
+
+    @model_validator(mode="after")
+    def _sem_repetidos(self) -> FechamentoDespesa:
+        codigos = [d.componente_codigo for d in self.despesas]
+        if len(codigos) != len(set(codigos)):
+            raise ValueError("Cada item da despesa deve ser informado uma única vez")
+        return self
+
+
+class DespesaFechada(BaseModel):
+    componente_codigo: str
+    componente_nome: str
+    natureza: str
+    ordem: int
+    provisionado: Decimal
+    valor: Decimal
 
 
 class Cancelamento(BaseModel):
@@ -187,6 +210,7 @@ class ImportacaoDetalhe(ImportacaoEntrada):
     despachante: RefNome | None
     terminal: RefNome | None
     calculo_vigente: CalculoSaida | None = None
+    despesas_fechadas: list[DespesaFechada] = []
 
     # A saída não revalida as regras de entrada (dados já persistidos)
     @model_validator(mode="after")

@@ -5,7 +5,7 @@ import { useAuth } from "./Autenticacao";
 
 export function Entrar() {
   const { usuario, entrar } = useAuth();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<unknown>(null);
   const [enviando, setEnviando] = useState(false);
@@ -17,7 +17,7 @@ export function Entrar() {
     setErro(null);
     setEnviando(true);
     try {
-      await entrar(email, senha);
+      await entrar(login.trim(), senha);
     } catch (err) {
       setErro(err);
     } finally {
@@ -46,14 +46,16 @@ export function Entrar() {
           </div>
           <h1>Entrar</h1>
           <div className="campo">
-            <label htmlFor="email">E-mail corporativo</label>
+            <label htmlFor="login">Usuário</label>
             <input
-              id="email"
+              id="login"
               className="entrada"
-              type="email"
+              type="text"
               autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoCapitalize="none"
+              spellCheck={false}
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
               required
             />
           </div>
@@ -70,7 +72,7 @@ export function Entrar() {
             />
           </div>
           <AvisoErro erro={erro} />
-          <button className="botao botao-primario" type="submit" disabled={enviando || !email || !senha}>
+          <button className="botao botao-primario" type="submit" disabled={enviando || !login.trim() || !senha}>
             {enviando ? "Entrando…" : "Entrar"}
           </button>
         </form>

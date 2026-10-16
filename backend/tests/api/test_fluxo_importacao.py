@@ -64,7 +64,8 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     calc = r.json()
     itens = {i["componente_codigo"]: i for i in calc["itens"]}
     # Mesmos valores do caso de referência do motor, com ICMS de 20% (alíquota de exemplo)
-    assert itens["CIF"]["valor"] == "60154.23"
+    assert itens["CIF"]["valor"] == "60000.00"  # valor aduaneiro, sem Siscomex
+    assert itens["ICMS"]["memoria"]["variaveis"]["taxa_siscomex"] == "154.23"
     assert itens["II"]["valor"] == "0.00"  # suspenso
     assert itens["IPI"]["valor"] == "0.00"  # suspenso
     assert itens["II"]["memoria"]["suspenso"] is True
@@ -75,7 +76,7 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     assert itens["TAXA_LIBERACAO"]["valor"] == "350.00"
     assert itens["DESPACHANTE"]["valor"] == "900.00"  # Uso e Consumo
     assert "TRANSP_SEC" not in itens and "AFRMM" not in itens
-    assert itens["TCIF"]["valor"] == "695.00"
+    assert itens["TCIF"]["valor"] == "700.00"  # 10 × 45 + 250
     assert itens["TCIF"]["competencia"] == "2026-11-01"  # IP no dia 16
     assert itens["II"]["competencia"] == "2026-10-01"
     assert "suspenso" not in itens["PIS"]["memoria"]
@@ -96,7 +97,7 @@ def test_adicionar_ativo_cobra_honorario_de_900(client, pcm, refs, payload):
     itens = {i["componente_codigo"]: i for i in r.json()["itens"]}
     assert itens["DESPACHANTE"]["valor"] == "900.00"
     assert itens["II"]["valor"] == "0.00"
-    assert itens["PIS"]["valor"] == "1263.24"  # alíquotas copiadas de Uso e Consumo
+    assert itens["PIS"]["valor"] == "1260.00"  # alíquotas copiadas de Uso e Consumo
 
 
 def test_taxa_de_liberacao_varia_por_processo(client, pcm, payload):

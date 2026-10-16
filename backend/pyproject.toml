@@ -8,6 +8,7 @@ dependencies = [
     "alembic==1.20.0",
     "bcrypt==5.0.0",
     "fastapi==0.143.0",
+    "ldap3==2.9.1",
     "psycopg[binary]==3.3.6",
     "pydantic-settings==2.15.0",
     "pyjwt==2.15.1",

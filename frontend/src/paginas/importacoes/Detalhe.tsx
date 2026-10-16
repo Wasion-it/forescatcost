@@ -1,10 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { PERM, useAuth } from "../../auth/Autenticacao";
 import { AvisoErro, Cabecalho, Carregando, Dialogo, Notificacao, Status } from "../../componentes/comuns";
 import { api, ErroApi } from "../../lib/api";
-import { diferencaProvisao, validarFechamento } from "../../lib/fechamento";
+import {
+  diferencaProvisao,
+  validarFechamento,
+  type DespesaInformada,
+  type ResultadoFechamento,
+} from "../../lib/fechamento";
 import { brl, data, dataHora, decimal2, mesLongo } from "../../lib/formato";
 import type { Calculo, Importacao, Previa, RegistroAuditoria } from "../../lib/tipos";
 import { FitaCalculo } from "./FitaCalculo";
@@ -139,7 +144,17 @@ export function DetalheImportacao() {
             )}
           </div>
           {calculoExibido ? (
-            <FitaCalculo calculo={calculoExibido} competenciaPrincipal={competenciaPrincipal} animar={animar && !versaoSelecionada} />
+            <FitaCalculo
+              calculo={calculoExibido}
+              competenciaPrincipal={competenciaPrincipal}
+              animar={animar && !versaoSelecionada}
+              // O realizado pertence ao cálculo vigente; versões históricas têm outros itens
+              realizado={
+                fechado && calculoExibido.vigente
+                  ? Object.fromEntries(i.despesas_fechadas.map((d) => [d.componente_codigo, d.valor]))
+                  : undefined
+              }
+            />
           ) : versaoSelecionada ? (
             <Carregando />
           ) : (
@@ -163,7 +178,7 @@ export function DetalheImportacao() {
               </div>
               <dl className="manifesto">
                 <Dado rotulo="Número da fatura" valor={i.numero_fatura ?? "–"} />
-                <Dado rotulo="Valor da fatura" valor={brl(i.valor_fatura)} />
+                <Dado rotulo="Total realizado" valor={brl(i.valor_fatura)} />
                 {i.calculo_vigente && i.valor_fatura && (
                   <Dado
                     rotulo="Diferença para a provisão"
@@ -173,6 +188,7 @@ export function DetalheImportacao() {
                 <Dado rotulo="Fechada em" valor={dataHora(i.fechado_em)} />
                 <Dado rotulo="Fechada por" valor={i.fechado_por_nome ?? "–"} />
               </dl>
+
             </section>
           )}
 
@@ -188,7 +204,10 @@ export function DetalheImportacao() {
               <Dado rotulo="Taxa de liberação" valor={brl(i.valor_taxa_liberacao)} />
               <Dado rotulo="Taxa USD" valor={i.taxa_usd ? Number(i.taxa_usd).toLocaleString("pt-BR", { maximumFractionDigits: 6 }) : "–"} />
               <Dado rotulo="Taxa CNY" valor={i.taxa_cny ? Number(i.taxa_cny).toLocaleString("pt-BR", { maximumFractionDigits: 6 }) : "–"} />
-              <Dado rotulo="Taxa Siscomex" valor={brl(i.valor_siscomex)} />
+              <Dado
+                rotulo="Taxa Siscomex"
+                valor={Number(i.valor_siscomex) > 0 ? `${brl(i.valor_siscomex)} (informada)` : "Calculada pelo sistema"}
+              />
               <Dado rotulo="Itens / containers" valor={`${i.qtd_itens} / ${i.qtd_containers}`} />
               <Dado rotulo="Peso bruto / líquido" valor={`${Number(i.peso_bruto_kg).toLocaleString("pt-BR")} / ${Number(i.peso_liquido_kg).toLocaleString("pt-BR")} kg`} />
               <Dado rotulo="Transportadora local" valor={i.transportadora_local?.nome ?? "Valores padrão"} />
@@ -198,44 +217,16 @@ export function DetalheImportacao() {
             {i.observacoes && <p className="observacoes">{i.observacoes}</p>}
           </section>
 
-          <section className="painel" aria-labelledby="t-versoes">
-            <div className="painel-topo">
-              <h2 id="t-versoes">Versões do cálculo</h2>
-            </div>
-            {versoes.data?.length ? (
-              <ol className="versoes">
-                {versoes.data.map((v) => {
-                  const ativa = versaoSelecionada ? v.id === versaoSelecionada : v.vigente;
-                  return (
-                    <li key={v.id}>
-                      <button
-                        className="versao"
-                        aria-current={ativa ? "true" : undefined}
-                        onClick={() => {
-                          setAnimar(false);
-                          setVersaoSelecionada(v.vigente ? null : v.id);
-                        }}
-                      >
-                        <span className="versao-topo">
-                          <strong>v{v.numero_versao}</strong>
-                          <span className="num">{brl(v.total_provisionado)}</span>
-                        </span>
-                        <span className="suave">
-                          {dataHora(v.calculado_em)}, {v.calculado_por_nome}
-                          {v.vigente && ", vigente"}
-                        </span>
-                        <span>{v.motivo}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : (
-              <p className="painel-corpo suave">Nenhuma versão registrada.</p>
-            )}
-          </section>
-
-          {pode(PERM.auditoriaLer) && <HistoricoAlteracoes id={i.id} />}
+          <PainelHistorico
+            id={i.id}
+            versoes={versoes.data}
+            versaoSelecionada={versaoSelecionada}
+            comAlteracoes={pode(PERM.auditoriaLer)}
+            aoEscolher={(v) => {
+              setAnimar(false);
+              setVersaoSelecionada(v.vigente ? null : v.id);
+            }}
+          />
         </aside>
       </div>
 
@@ -412,29 +403,33 @@ function DialogoCancelamento({ importacao, aoFechar, aoConcluir }: { importacao:
 }
 
 function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: Importacao; aoFechar: () => void; aoConcluir: () => void }) {
+  // Cada item que compõe a despesa recebe o valor realizado (a fatura de cada despesa é individual)
+  const itens = (importacao.calculo_vigente?.itens ?? []).filter((it) => it.compoe_provisao);
+  const codigos = itens.map((it) => it.componente_codigo);
   const [numero, setNumero] = useState("");
-  const [valorTexto, setValorTexto] = useState("");
-  const [erros, setErros] = useState<{ numero?: string; valor?: string }>({});
+  const [textos, setTextos] = useState<Record<string, string>>({});
+  const [erros, setErros] = useState<ResultadoFechamento["erros"]>({ itens: {} });
   const fechar = useMutation({
-    mutationFn: (corpo: { valor_fatura: string; numero_fatura: string }) =>
+    mutationFn: (corpo: { numero_fatura: string; despesas: DespesaInformada[] }) =>
       api.post<Importacao>(`/importacoes/${importacao.id}/fechar`, { versao: importacao.versao, ...corpo }),
     onSuccess: aoConcluir,
   });
 
   const provisionado = importacao.calculo_vigente?.total_provisionado ?? "0";
-  const { valor } = validarFechamento(numero, valorTexto);
+  const { total } = validarFechamento(numero, textos, codigos);
+  const informou = codigos.some((c) => (textos[c] ?? "").trim() !== "");
   const errosServidor = fechar.error instanceof ErroApi ? fechar.error.campos : {};
   const erroNumero = erros.numero ?? errosServidor.numero_fatura;
-  const erroValor = erros.valor ?? errosServidor.valor_fatura;
-  // Erros por campo já aparecem junto do campo; o aviso geral cobre o restante (409, regras de negócio)
-  const erroGeral = fechar.error instanceof ErroApi && Object.keys(fechar.error.campos).length > 0 ? null : fechar.error;
+  // Erro do número aparece junto do campo; o aviso geral cobre o restante (409, itens faltando, regras de negócio)
+  const soNumero = Object.keys(errosServidor).length > 0 && Object.keys(errosServidor).every((k) => k === "numero_fatura");
+  const erroGeral = soNumero ? null : fechar.error;
 
   function enviar(e: FormEvent) {
     e.preventDefault();
-    const r = validarFechamento(numero, valorTexto);
+    const r = validarFechamento(numero, textos, codigos);
     setErros(r.erros);
-    if (r.valor === null || r.erros.numero) return;
-    fechar.mutate({ valor_fatura: r.valor, numero_fatura: numero.trim() });
+    if (!r.despesas || r.erros.numero) return;
+    fechar.mutate({ numero_fatura: numero.trim(), despesas: r.despesas });
   }
 
   return (
@@ -454,7 +449,10 @@ function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: I
       }
     >
       <form id="form-fechamento" className="form-dialogo" onSubmit={enviar} noValidate>
-        <p>Informe a fatura que encerra este processo. Depois de fechado, ele não pode ser editado, recalculado nem cancelado.</p>
+        <p>
+          Informe o valor realizado de cada item da despesa. Depois de fechado, o processo não pode ser editado,
+          recalculado nem cancelado.
+        </p>
         <div className="campo">
           <label htmlFor="fatura-numero">Número da fatura</label>
           <input
@@ -475,38 +473,73 @@ function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: I
             </span>
           )}
         </div>
-        <div className="campo">
-          <label htmlFor="fatura-valor">Valor da fatura (R$)</label>
-          <input
-            id="fatura-valor"
-            className="entrada num"
-            inputMode="decimal"
-            value={valorTexto}
-            onChange={(e) => {
-              setValorTexto(e.target.value);
-              setErros(({ valor: _, ...resto }) => resto);
-            }}
-            aria-invalid={Boolean(erroValor)}
-            aria-describedby={erroValor ? "fatura-valor-erro" : undefined}
-          />
-          {erroValor && (
-            <span className="erro-campo" id="fatura-valor-erro">
-              {erroValor}
-            </span>
-          )}
-        </div>
+        <table className="tabela tabela-compacta">
+          <caption className="sr-only">Valor realizado de cada item da despesa</caption>
+          <thead>
+            <tr>
+              <th scope="col">Item</th>
+              <th scope="col" className="num">
+                Provisionado
+              </th>
+              <th scope="col" className="num">
+                Realizado (R$)
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {itens.map((it) => {
+              const codigo = it.componente_codigo;
+              const erro = erros.itens[codigo];
+              return (
+                <tr key={codigo}>
+                  <td>
+                    <label htmlFor={`despesa-${codigo}`}>{it.componente_nome}</label>
+                  </td>
+                  <td className="num">{brl(it.valor)}</td>
+                  <td>
+                    <input
+                      id={`despesa-${codigo}`}
+                      className="entrada num"
+                      inputMode="decimal"
+                      value={textos[codigo] ?? ""}
+                      onChange={(e) => {
+                        setTextos((atual) => ({ ...atual, [codigo]: e.target.value }));
+                        setErros(({ itens: antigos, ...resto }) => {
+                          const { [codigo]: _, ...itensRestantes } = antigos;
+                          return { ...resto, itens: itensRestantes, total: undefined };
+                        });
+                      }}
+                      aria-invalid={Boolean(erro)}
+                      aria-describedby={erro ? `despesa-${codigo}-erro` : undefined}
+                    />
+                    {erro && (
+                      <span className="erro-campo" id={`despesa-${codigo}-erro`}>
+                        {erro}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {erros.total && (
+          <span className="erro-campo" role="alert">
+            {erros.total}
+          </span>
+        )}
         <div className="comparacao comparacao-tres" aria-live="polite">
           <div>
             <span className="suave">Provisionado</span>
             <strong className="num">{brl(provisionado)}</strong>
           </div>
           <div>
-            <span className="suave">Fatura</span>
-            <strong className="num">{valor ? brl(valor) : "–"}</strong>
+            <span className="suave">Realizado</span>
+            <strong className="num">{informou ? brl(total) : "–"}</strong>
           </div>
           <div>
             <span className="suave">Diferença</span>
-            <strong className="num">{valor ? formatarDiferenca(diferencaProvisao(provisionado, valor)) : "–"}</strong>
+            <strong className="num">{informou ? formatarDiferenca(diferencaProvisao(provisionado, total)) : "–"}</strong>
           </div>
         </div>
         <AvisoErro erro={erroGeral} />
@@ -527,33 +560,134 @@ const ROTULOS_CAMPOS: Record<string, string> = {
   transportadora_secundaria_id: "transportadora secundária",
 };
 
-function HistoricoAlteracoes({ id }: { id: string }) {
-  const r = useQuery({
+type AbaHistorico = "versoes" | "alteracoes";
+
+/**
+ * Versões do cálculo e alterações do processo em um só painel com abas.
+ * As listas rolam dentro do painel, então a coluna lateral não cresce com o histórico.
+ */
+function PainelHistorico({
+  id,
+  versoes,
+  versaoSelecionada,
+  comAlteracoes,
+  aoEscolher,
+}: {
+  id: string;
+  versoes: Resumo[] | undefined;
+  versaoSelecionada: string | null;
+  comAlteracoes: boolean;
+  aoEscolher: (v: Resumo) => void;
+}) {
+  const [aba, setAba] = useState<AbaHistorico>("versoes");
+  const alteracoes = useQuery({
     queryKey: ["auditoria", "importacao", id],
     queryFn: () => api.get<{ itens: RegistroAuditoria[] }>(`/auditoria?tabela=importacao&registro_id=${id}&tamanho=20`),
+    enabled: comAlteracoes,
   });
-  if (!r.data?.itens.length) return null;
+
+  const abas: { id: AbaHistorico; rotulo: string; total: number | null }[] = [
+    { id: "versoes", rotulo: "Versões", total: versoes?.length ?? null },
+    ...(comAlteracoes ? [{ id: "alteracoes" as const, rotulo: "Alterações", total: alteracoes.data?.itens.length ?? null }] : []),
+  ];
+
+  // Setas esquerda/direita, Home e End trocam de aba (padrão WAI-ARIA para abas)
+  function aoTeclar(e: KeyboardEvent<HTMLDivElement>) {
+    const atual = abas.findIndex((a) => a.id === aba);
+    let alvo = atual;
+    if (e.key === "ArrowRight") alvo = (atual + 1) % abas.length;
+    else if (e.key === "ArrowLeft") alvo = (atual - 1 + abas.length) % abas.length;
+    else if (e.key === "Home") alvo = 0;
+    else if (e.key === "End") alvo = abas.length - 1;
+    else return;
+    e.preventDefault();
+    setAba(abas[alvo].id);
+    document.getElementById(`aba-${abas[alvo].id}`)?.focus();
+  }
+
   return (
-    <section className="painel" aria-labelledby="t-alteracoes">
-      <div className="painel-topo">
-        <h2 id="t-alteracoes">Alterações</h2>
+    <section className="painel" aria-labelledby="t-historico">
+      <div className="painel-topo painel-topo-abas">
+        <h2 id="t-historico" className="sr-only">
+          Histórico do processo
+        </h2>
+        <div className="abas" role="tablist" aria-labelledby="t-historico" onKeyDown={aoTeclar}>
+          {abas.map((a) => (
+            <button
+              key={a.id}
+              id={`aba-${a.id}`}
+              type="button"
+              role="tab"
+              className="aba"
+              aria-selected={aba === a.id}
+              aria-controls={`painel-${a.id}`}
+              tabIndex={aba === a.id ? 0 : -1}
+              onClick={() => setAba(a.id)}
+            >
+              {a.rotulo}
+              {a.total !== null && <span className="aba-contagem">{a.total}</span>}
+            </button>
+          ))}
+        </div>
       </div>
-      <ol className="linha-tempo">
-        {r.data.itens.map((a) => (
-          <li key={a.id}>
-            <span className="suave">
-              {dataHora(a.ocorrido_em)}, {a.usuario_nome}
-            </span>
-            <span>
-              {a.acao === "INSERT"
-                ? "Cadastrou o processo"
-                : a.campos_alterados?.includes("numero_fatura")
-                  ? "Fechou a despesa"
-                  : `Alterou ${(a.campos_alterados ?? []).map((c) => ROTULOS_CAMPOS[c] ?? c.replace(/_/g, " ")).join(", ")}`}
-            </span>
-          </li>
-        ))}
-      </ol>
+
+      {aba === "versoes" && (
+        <div id="painel-versoes" role="tabpanel" aria-labelledby="aba-versoes" tabIndex={0} className="historico-rolagem">
+          {versoes?.length ? (
+            <ol className="versoes">
+              {versoes.map((v) => {
+                const ativa = versaoSelecionada ? v.id === versaoSelecionada : v.vigente;
+                return (
+                  <li key={v.id}>
+                    <button className="versao" aria-current={ativa ? "true" : undefined} onClick={() => aoEscolher(v)}>
+                      <span className="versao-topo">
+                        <strong>
+                          v{v.numero_versao}
+                          {v.vigente && <span className="versao-selo">vigente</span>}
+                        </strong>
+                        <span className="num">{brl(v.total_provisionado)}</span>
+                      </span>
+                      <span className="suave">
+                        {dataHora(v.calculado_em)}, {v.calculado_por_nome}
+                      </span>
+                      <span className="versao-motivo" title={v.motivo}>
+                        {v.motivo}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="painel-corpo suave">Nenhuma versão registrada.</p>
+          )}
+        </div>
+      )}
+
+      {aba === "alteracoes" && (
+        <div id="painel-alteracoes" role="tabpanel" aria-labelledby="aba-alteracoes" tabIndex={0} className="historico-rolagem">
+          {alteracoes.data?.itens.length ? (
+            <ol className="linha-tempo">
+              {alteracoes.data.itens.map((a) => (
+                <li key={a.id}>
+                  <span className="suave">
+                    {dataHora(a.ocorrido_em)}, {a.usuario_nome}
+                  </span>
+                  <span>
+                    {a.acao === "INSERT"
+                      ? "Cadastrou o processo"
+                      : a.campos_alterados?.includes("numero_fatura")
+                        ? "Fechou a despesa"
+                        : `Alterou ${(a.campos_alterados ?? []).map((c) => ROTULOS_CAMPOS[c] ?? c.replace(/_/g, " ")).join(", ")}`}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="painel-corpo suave">{alteracoes.isLoading ? "Carregando…" : "Nenhuma alteração registrada."}</p>
+          )}
+        </div>
+      )}
     </section>
   );
 }

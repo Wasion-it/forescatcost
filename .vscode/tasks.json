@@ -33,7 +33,7 @@
     },
     {
       "label": "Frontend: Vite (dev)",
-      "detail": "http://localhost:5173 com proxy /api para :8000",
+      "detail": "http://localhost:5173 com proxy /api para :8010",
       "type": "shell",
       "command": "npm run dev",
       "options": { "cwd": "${workspaceFolder}/frontend" },

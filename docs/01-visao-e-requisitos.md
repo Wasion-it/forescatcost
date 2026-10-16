@@ -73,7 +73,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | Termo | Definição |
 |-------|-----------|
 | IP | Identificador da importação provisionada. Número livre (sem formato fiscal) que identifica a provisão do processo; no lugar da declaração aduaneira, que não é usada porque a provisão acontece antes dela. O significado de IP foi inferido e deve ser confirmado |
-| CIF | Cost, Insurance and Freight. Aqui é a base de cálculo configurável (inicialmente Invoice + Frete + Siscomex) |
+| CIF | Cost, Insurance and Freight. Aqui é o valor aduaneiro em R$ (Invoice + Frete), base de cálculo configurável. Não inclui a Taxa Siscomex |
 | TCIF | Taxa de Controle de Incentivos Fiscais (SUFRAMA) |
 | Taxa de liberação | Despesa de liberação da carga, informada em cada processo (varia por agente e por processo). Aparece separada do frete internacional |
 | Suspensão (II/IPI) | Condição em que o Imposto de Importação ou o IPI não é pago. Controlada por parâmetro e, por padrão, vale para todos os tipos |
@@ -87,10 +87,10 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | ID | Regra |
 |----|-------|
 | RN01 | Conversão cambial: valor em BRL = valor na moeda × taxa informada no processo (Taxa USD, Taxa CNY). BRL tem taxa 1. Toda moeda usada no processo exige taxa. |
-| RN02 | CIF = Invoice (BRL) + Frete (BRL) + Siscomex. A fórmula é configurável e versionada. |
+| RN02 | CIF = Invoice (BRL) + Frete (BRL), igual ao valor aduaneiro da DI. A Taxa Siscomex não entra no CIF nem na base de II, IPI, PIS e COFINS; entra só na base do ICMS. A fórmula é configurável e versionada. |
 | RN03 | Alíquotas (II, IPI, PIS, COFINS, ICMS e outros) vêm de tabela parametrizada por tipo de importação, com origem "manual" ou "TecWin". Podem ser sobrescritas no processo, com justificativa obrigatória. |
 | RN04 | A ordem e a base de cálculo dos impostos seguem o pipeline definido no doc 04 e devem ser validadas pelo Fiscal antes do go-live. |
-| RN05 | TCIF = R$ 45,00 × quantidade de itens + R$ 245,00 por IP. |
+| RN05 | TCIF = R$ 45,00 × quantidade de itens + R$ 250,00 por IP (Lei 13.451/2017, art. 8º, § 2º; cada parcela é limitada a 1,5% do valor da mercadoria, limite ainda não aplicado). O valor de R$ 245,00 do levantamento inicial não tem respaldo legal e foi corrigido. |
 | RN06 | Competência: se o dia da data da IP for maior que 15, o valor é provisionado no mês seguinte; senão, no mês da data da IP. O dia de corte é parametrizável e a regra é configurável por componente (hoje aplica-se à TCIF). |
 | RN07 | Transporte local = valor por container × qtd. containers + 0,06% × valor da carga. Valores por transportadora, parametrizáveis. |
 | RN09 | Armazenagem marítima, 1º período = 0,92% × CIF. Períodos adicionais e valor mínimo são parametrizáveis por terminal (ex.: Chibatão). |
@@ -105,8 +105,8 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN18 | Valores monetários usam aritmética decimal (nunca ponto flutuante). Cada componente é arredondado em 2 casas, meia para cima. A regra deve ser confirmada contra as planilhas atuais. |
 | RN19 | O número da IP é único quando informado. É texto livre (até 30 caracteres), sem validação de formato fiscal. |
 | RN21 | II e IPI são suspensos (não pagos) por padrão, controlados pelos parâmetros ii_suspenso e ipi_suspenso (1 = suspenso, 0 = cobra), com exceção possível por tipo de importação e vigência. Suspenso, o valor é 0,00 e o ICMS não os inclui na base. A memória de cálculo marca o item como suspenso. |
-| RN22 | A Taxa Siscomex é um componente do grupo de impostos e compõe a provisão. O valor também já está no CIF (base), então o ICMS não soma o Siscomex de novo. |
-| RN23 | Fechamento da despesa (por processo): só processo CALCULADO e sem recálculo pendente pode ser fechado. O fechamento exige o valor da fatura (maior que zero, 2 casas) e o número da fatura (texto, até 60 caracteres, sem espaços nas pontas). Registra data/hora e usuário. Processo FECHADO não pode ser editado, recalculado nem cancelado e continua somando na provisão. A regra é garantida também por constraint no banco. Não substitui o fechamento de competência (RN17, R1). |
+| RN22 | A Taxa Siscomex é um componente do grupo de impostos e compõe a provisão. O valor fica fora do CIF e é somado só na base do ICMS (RN02). Se o processo não informar o valor, o sistema calcula pela tabela oficial (valor por DI + faixas por adição, adições estimadas por qtd_itens); valor informado maior que zero prevalece (doc 04). |
+| RN23 | Fechamento da despesa (por processo): só processo CALCULADO e sem recálculo pendente pode ser fechado. O fechamento exige o valor realizado de cada item que compõe a despesa (zero ou mais, 2 casas, todos os itens do cálculo vigente que compõem a provisão), com total maior que zero, e o número da fatura (texto, até 60 caracteres, sem espaços nas pontas). O valor da fatura do processo é a soma dos itens. Registra data/hora e usuário. Processo FECHADO não pode ser editado, recalculado nem cancelado e continua somando na provisão. A regra é garantida também por constraint no banco. Não substitui o fechamento de competência (RN17, R1). |
 | RN20 | Cada componente indica se compõe o total de desembolso provisionado. Bases de cálculo, como o CIF, não somam no total, para evitar dupla contagem (o frete, por exemplo, entra no CIF e também no componente Frete Internacional). |
 
 ## 5. Requisitos funcionais
@@ -169,7 +169,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 
 ## 7. Pontos em aberto (validar com o negócio antes do desenvolvimento)
 
-1. Siscomex no CIF: legalmente o valor aduaneiro é FOB + frete + seguro, e a taxa Siscomex entra na base do ICMS, não na do II. A fórmula atual é uma convenção interna da provisão? Confirmar com o Fiscal.
+1. Siscomex no CIF: resolvido. Conferido com a DI do IMP-00010, o CIF é o valor aduaneiro sem a Taxa Siscomex, que passou a entrar só na base do ICMS (RN02).
 2. Seguro internacional: não está nos dados de entrada. Deve ser incluído?
 3. Modal: a armazenagem depende de marítimo × aéreo, mas o modal não está nos dados de entrada. Proposta: incluir.
 4. "Valor da carga" (transportes): é o CIF em BRL, a invoice em BRL ou outro valor?

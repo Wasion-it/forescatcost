@@ -2,29 +2,47 @@ import { describe, expect, it } from "vitest";
 import { diferencaProvisao, validarFechamento } from "./fechamento";
 
 describe("validarFechamento", () => {
-  it("aceita número e valor válidos", () => {
-    const r = validarFechamento(" FT-2026/0412 ", "61.234,56");
-    expect(r.erros).toEqual({});
-    expect(r.valor).toBe("61234.56");
+  const codigos = ["II", "IPI", "ICMS"];
+
+  it("aceita número e valores válidos, somando os itens", () => {
+    const r = validarFechamento(" FT-2026/0412 ", { II: "1.234,56", IPI: "0", ICMS: "100,10" }, codigos);
+    expect(r.erros).toEqual({ itens: {} });
+    expect(r.despesas).toEqual([
+      { componente_codigo: "II", valor: "1234.56" },
+      { componente_codigo: "IPI", valor: "0" },
+      { componente_codigo: "ICMS", valor: "100.10" },
+    ]);
+    expect(r.total).toBe("1334.66");
   });
   it("exige o número da fatura", () => {
-    expect(validarFechamento("   ", "10").erros.numero).toBe("Informe o número da fatura");
+    expect(validarFechamento("   ", { II: "1", IPI: "1", ICMS: "1" }, codigos).erros.numero).toBe(
+      "Informe o número da fatura",
+    );
   });
-  it("exige o valor da fatura", () => {
-    const r = validarFechamento("FT-1", "  ");
-    expect(r.erros.valor).toBe("Informe o valor da fatura");
-    expect(r.valor).toBeNull();
+  it("exige o valor de cada item, indicando qual falta", () => {
+    const r = validarFechamento("FT-1", { II: "10", IPI: "  " }, codigos);
+    expect(r.erros.itens).toEqual({ IPI: "Informe o valor", ICMS: "Informe o valor" });
+    expect(r.despesas).toBeNull();
   });
-  it("recusa valor zero ou negativo", () => {
-    expect(validarFechamento("FT-1", "0").erros.valor).toBe("O valor da fatura deve ser maior que zero");
-    expect(validarFechamento("FT-1", "-5,00").erros.valor).toBe("O valor da fatura deve ser maior que zero");
+  it("aceita zero em um item, mas recusa negativo", () => {
+    expect(validarFechamento("FT-1", { II: "0", IPI: "5", ICMS: "5" }, codigos).despesas).not.toBeNull();
+    const r = validarFechamento("FT-1", { II: "-5,00", IPI: "5", ICMS: "5" }, codigos);
+    expect(r.erros.itens.II).toBe("O valor não pode ser negativo");
   });
-  it("recusa texto que não é número", () => {
-    expect(validarFechamento("FT-1", "12a").erros.valor).toBe("Valor inválido");
+  it("recusa texto que não é número e mais de 2 casas", () => {
+    const r = validarFechamento("FT-1", { II: "12a", IPI: "1,234", ICMS: "1" }, codigos);
+    expect(r.erros.itens.II).toBe("Valor inválido");
+    expect(r.erros.itens.IPI).toBe("Use no máximo 2 casas decimais");
   });
-  it("devolve os dois erros ao mesmo tempo", () => {
-    const r = validarFechamento("", "0");
-    expect(Object.keys(r.erros).sort()).toEqual(["numero", "valor"]);
+  it("recusa total zerado", () => {
+    const r = validarFechamento("FT-1", { II: "0", IPI: "0,00", ICMS: "0" }, codigos);
+    expect(r.erros.total).toBe("O total da despesa deve ser maior que zero");
+    expect(r.despesas).toBeNull();
+  });
+  it("devolve erro do número e dos itens ao mesmo tempo", () => {
+    const r = validarFechamento("", { II: "x" }, codigos);
+    expect(r.erros.numero).toBeDefined();
+    expect(Object.keys(r.erros.itens).sort()).toEqual(["ICMS", "II", "IPI"]);
   });
 });
 

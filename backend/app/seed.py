@@ -41,6 +41,9 @@ from app.models import (
 D = Decimal
 INICIO = date(2026, 1, 1)
 EXEMPLO = "Valor de exemplo da carga inicial. Validar com PCM/Fiscal."
+JUSTIFICATIVA_SISCOMEX = "Portaria ME 4.131/2021 (vigente desde jun/2021)"
+JUSTIFICATIVA_TCIF = "Lei 13.451/2017, art. 8º, § 2º: R$ 250,00 por PLI e R$ 45,00 por mercadoria"
+JUSTIFICATIVAS = {"tcif_valor_ip": JUSTIFICATIVA_TCIF, "tcif_valor_item": JUSTIFICATIVA_TCIF}
 
 PERMISSOES = {
     P.IMPORTACAO_LER: "Consultar importações",
@@ -77,7 +80,14 @@ NATUREZA = {
 PARAMETROS = {
     "competencia_dia_corte": ("Dia de corte da competência (TCIF)", "INTEIRO", "GLOBAL", "Competência", D(15)),
     "tcif_valor_item": ("TCIF por item", "MONETARIO", "GLOBAL", "TCIF", D(45)),
-    "tcif_valor_ip": ("TCIF por IP", "MONETARIO", "GLOBAL", "TCIF", D(245)),
+    "tcif_valor_ip": ("TCIF por IP", "MONETARIO", "GLOBAL", "TCIF", D(250)),
+    "siscomex_registro": ("Siscomex, valor por DI/Duimp", "MONETARIO", "GLOBAL", "Siscomex", D("115.67")),
+    "siscomex_adicao_faixa1": ("Siscomex por adição, da 1ª à 2ª", "MONETARIO", "GLOBAL", "Siscomex", D("38.56")),
+    "siscomex_adicao_faixa2": ("Siscomex por adição, da 3ª à 5ª", "MONETARIO", "GLOBAL", "Siscomex", D("30.85")),
+    "siscomex_adicao_faixa3": ("Siscomex por adição, da 6ª à 10ª", "MONETARIO", "GLOBAL", "Siscomex", D("23.14")),
+    "siscomex_adicao_faixa4": ("Siscomex por adição, da 11ª à 20ª", "MONETARIO", "GLOBAL", "Siscomex", D("15.42")),
+    "siscomex_adicao_faixa5": ("Siscomex por adição, da 21ª à 50ª", "MONETARIO", "GLOBAL", "Siscomex", D("7.71")),
+    "siscomex_adicao_faixa6": ("Siscomex por adição, da 51ª em diante", "MONETARIO", "GLOBAL", "Siscomex", D("3.86")),
     "ii_suspenso": ("Imposto de Importação suspenso (não paga)", "BOOLEANO", "TIPO_IMPORTACAO", "Impostos", D(1)),
     "ipi_suspenso": ("IPI suspenso (não paga)", "BOOLEANO", "TIPO_IMPORTACAO", "Impostos", D(1)),
     "tl_valor_container": ("Transporte local por container", "MONETARIO", "TRANSP_LOCAL", "Transporte local", D(1500)),
@@ -160,11 +170,15 @@ def seed_base(db: Session) -> None:
         db.add(p)
         db.flush()
         if padrao is not None:
+            justificativa = JUSTIFICATIVAS.get(
+                chave, JUSTIFICATIVA_SISCOMEX if chave.startswith("siscomex_") else EXEMPLO
+            )
             db.add(
                 ParametroValor(
-                    parametro_id=p.id, valor=padrao, vigencia_inicio=INICIO, justificativa=EXEMPLO
+                    parametro_id=p.id, valor=padrao, vigencia_inicio=INICIO,
+                    justificativa=justificativa,
                 )
-            )
+            )  # fmt: skip
         if chave == "despachante_honorario_ip":
             for codigo, valor in [
                 ("INDUSTRIALIZACAO", D(715)), ("USO_CONSUMO", D(900)), ("ADICIONAR_ATIVO", D(900)),
@@ -205,7 +219,11 @@ def seed_base(db: Session) -> None:
 def seed_exemplos(db: Session) -> None:
     from app.modules.calculo import service as calculo
     from app.modules.importacoes import service as importacoes
-    from app.modules.importacoes.schemas import FechamentoDespesa, ImportacaoEntrada
+    from app.modules.importacoes.schemas import (
+        DespesaFechamento,
+        FechamentoDespesa,
+        ImportacaoEntrada,
+    )
 
     if db.scalar(select(ComponenteCusto.id).limit(1)) is None:
         raise RuntimeError("Carregue os dados base antes dos exemplos")
@@ -225,7 +243,7 @@ def seed_exemplos(db: Session) -> None:
     def base(**kw):
         padrao = dict(
             modal="MARITIMO", moeda_invoice="USD", moeda_frete="USD",
-            taxa_usd=D("5.4210"), taxa_cny=D("0.7512"), valor_siscomex=D("154.23"),
+            taxa_usd=D("5.4210"), taxa_cny=D("0.7512"),
             transportadora_local_id=transp["Rodo Norte Logística"],
             despachante_id=desp["Despachos Manaus Assessoria"], terminal_id=term["Chibatão"],
         )  # fmt: skip
@@ -293,13 +311,20 @@ def seed_exemplos(db: Session) -> None:
             db.flush()
         if acao == "calcular_e_fechar":
             db.refresh(imp)
+            # Realizado = provisionado em cada item, com R$ 120,50 a mais no último
+            itens = [i for i in vigente.itens if i.compoe_provisao]
+            despesas = [
+                DespesaFechamento(
+                    componente_codigo=i.componente_codigo,
+                    valor=i.valor + (D("120.50") if i is itens[-1] else D(0)),
+                )
+                for i in itens
+            ]
             importacoes.fechar(
                 db,
                 imp,
                 FechamentoDespesa(
-                    versao=imp.versao,
-                    valor_fatura=vigente.total_provisionado + D("120.50"),
-                    numero_fatura="FT-2026/0412",
+                    versao=imp.versao, numero_fatura="FT-2026/0412", despesas=despesas
                 ),
                 pcm,
             )
