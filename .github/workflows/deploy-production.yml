@@ -29,6 +29,22 @@ jobs:
       frontend_port: ${{ vars.FORECAST_FRONTEND_PORT || '18080' }}
       cors_origins: ${{ vars.FORECAST_CORS_ORIGINS || '[]' }}
 
+  observability:
+    name: Registrar deploy no Grafana
+    needs: deploy
+    uses: ./.github/workflows/includes-deployment-observability.yml
+    secrets:
+      GRAFANA_ANNOTATION_TOKEN: ${{ secrets.GRAFANA_ANNOTATION_TOKEN }}
+    with:
+      environment: prod
+      grafana_url: ${{ vars.GRAFANA_URL }}
+      runner_label: self-hosted
+      image_tag: ${{ inputs.image_tag }}
+      actor: ${{ github.actor }}
+      run_id: ${{ github.run_id }}
+      run_number: ${{ github.run_number }}
+      run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
   release:
     name: Publicar release
     needs: deploy
@@ -43,7 +59,7 @@ jobs:
     name: Resumo final
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [deploy, release]
+    needs: [deploy, observability, release]
     steps:
       - name: Gerar resumo
         run: |
@@ -52,6 +68,10 @@ jobs:
             echo ''
             echo '- Disparo: manual via workflow_dispatch'
             echo "- Deploy: ${{ needs.deploy.result }}"
+            echo "- Observabilidade: ${{ needs.observability.outputs.annotation_result }}"
+            if [ -n "${{ needs.observability.outputs.annotation_id }}" ]; then
+              echo "- Grafana Annotation ID: ${{ needs.observability.outputs.annotation_id }}"
+            fi
             echo "- Release: ${{ needs.release.result }}"
             echo "- Release URL: ${{ needs.release.outputs.release_url }}"
             echo "- Tag imutável: ${{ inputs.image_tag }}"
