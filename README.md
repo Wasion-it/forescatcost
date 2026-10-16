@@ -10,7 +10,7 @@ Sistema web do PCM para prever custos e impostos de importação e entregar ao F
 
 ## Como rodar (desenvolvimento)
 
-Pré-requisitos: Docker, [uv](https://docs.astral.sh/uv/) e Node.js 20+.
+Pré-requisitos: Docker, [uv](https://docs.astral.sh/uv/) e Node.js 22.12+.
 
 ```powershell
 # 1. Banco (porta 5433; cria também o banco forecast_test)
