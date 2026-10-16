@@ -1,0 +1,107 @@
+name: Build de imagens Docker
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: Tag imutável das imagens
+        required: true
+        type: string
+      push:
+        description: Publicar imagens no Registry Wasion
+        required: false
+        type: boolean
+        default: false
+      runner_label:
+        description: Runner usado para construir as imagens
+        required: false
+        type: string
+        default: ubuntu-latest
+    secrets:
+      REGISTRY_USERNAME:
+        required: false
+      REGISTRY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Construir e validar imagens backend e frontend
+    runs-on: ${{ inputs.runner_label }}
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Login no Registry Wasion
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          registry: registry.wasion.com.br
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build do backend
+        shell: bash
+        run: |
+          docker build \
+            -f backend/Dockerfile \
+            -t "registry.wasion.com.br/wasion/forecast-backend:${{ inputs.image_tag }}" \
+            backend
+
+      - name: Build do frontend
+        shell: bash
+        run: |
+          docker build \
+            -f frontend/Dockerfile \
+            -t "registry.wasion.com.br/wasion/forecast-frontend:${{ inputs.image_tag }}" \
+            frontend
+
+      - name: Trivy - imagem backend
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: registry.wasion.com.br/wasion/forecast-backend:${{ inputs.image_tag }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Trivy - imagem frontend
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: registry.wasion.com.br/wasion/forecast-frontend:${{ inputs.image_tag }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Publicar imagens imutáveis
+        if: ${{ inputs.push }}
+        shell: bash
+        run: |
+          docker push "registry.wasion.com.br/wasion/forecast-backend:${{ inputs.image_tag }}"
+          docker push "registry.wasion.com.br/wasion/forecast-frontend:${{ inputs.image_tag }}"
+
+      - name: Resumo das imagens
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo '## Imagens Docker - Forecast'
+            echo ''
+            echo "- Backend: registry.wasion.com.br/wasion/forecast-backend:${{ inputs.image_tag }}"
+            echo "- Frontend: registry.wasion.com.br/wasion/forecast-frontend:${{ inputs.image_tag }}"
+            echo "- Publicadas: ${{ inputs.push }}"
+            echo "- Runner: ${{ inputs.runner_label }}"
+            echo '- Segurança: Trivy bloqueia vulnerabilidades CRITICAL com correção disponível'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Logout do Registry Wasion
+        if: ${{ always() && inputs.push }}
+        shell: bash
+        run: docker logout registry.wasion.com.br || true
