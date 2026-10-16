@@ -1,0 +1,34 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validar Pull Request
+    uses: ./.github/workflows/code-test.yml
+
+  security:
+    name: Validar segurança
+    uses: ./.github/workflows/includes-security.yml
+    permissions:
+      contents: read
+
+  container-build:
+    name: Validar build das imagens Docker
+    needs: [validate, security]
+    uses: ./.github/workflows/includes-container-build.yml
+    permissions:
+      contents: read
+    with:
+      image_tag: pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+      push: false
