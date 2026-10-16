@@ -1,0 +1,61 @@
+name: Publicação de produção
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag imutável já publicada (sha-<commit completo>)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: forecast-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publicar Forecast em produção
+    uses: ./.github/workflows/includes-remote-deploy.yml
+    secrets: inherit
+    with:
+      environment: prod
+      deploy_host: ${{ vars.DEPLOY_PROD_HOST }}
+      deploy_user: ${{ vars.DEPLOY_PROD_USER }}
+      deploy_path: ${{ vars.DEPLOY_PROD_PATH }}
+      image_tag: ${{ inputs.image_tag }}
+      frontend_port: ${{ vars.FORECAST_FRONTEND_PORT || '18080' }}
+      cors_origins: ${{ vars.FORECAST_CORS_ORIGINS || '[]' }}
+
+  release:
+    name: Publicar release
+    needs: deploy
+    uses: ./.github/workflows/includes-release.yml
+    permissions:
+      contents: write
+    with:
+      environment: prod
+      image_tag: ${{ inputs.image_tag }}
+
+  report:
+    name: Resumo final
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [deploy, release]
+    steps:
+      - name: Gerar resumo
+        run: |
+          {
+            echo '## Publicação de produção - Forecast'
+            echo ''
+            echo '- Disparo: manual via workflow_dispatch'
+            echo "- Deploy: ${{ needs.deploy.result }}"
+            echo "- Release: ${{ needs.release.result }}"
+            echo "- Release URL: ${{ needs.release.outputs.release_url }}"
+            echo "- Tag imutável: ${{ inputs.image_tag }}"
+            echo "- Executado por: ${{ github.actor }}"
+            echo "- GitHub Run: #${{ github.run_number }}"
+            echo '- Registry: registry.wasion.com.br'
+          } >> "$GITHUB_STEP_SUMMARY"

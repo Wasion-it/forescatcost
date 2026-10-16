@@ -14,7 +14,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="Forecast de Importação",
-    version="0.1.0",
+    version=settings.app_version,
     description="Previsão de custos e impostos de importação (PCM → Financeiro).",
     docs_url="/api/docs" if settings.ambiente != "prd" else None,
     openapi_url="/api/openapi.json" if settings.ambiente != "prd" else None,
@@ -34,6 +34,20 @@ for r in (identidade, cadastros, parametros, importacoes, provisoes, auditoria):
 app.include_router(api)
 
 
+def _health_payload() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "version": settings.app_version,
+        "commit": settings.app_commit,
+        "environment": settings.app_environment,
+    }
+
+
 @app.get("/health", include_in_schema=False)
 def health():
-    return {"status": "ok"}
+    return _health_payload()
+
+
+@app.get("/api/v1/health", include_in_schema=False)
+def api_health():
+    return _health_payload()

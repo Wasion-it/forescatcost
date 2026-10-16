@@ -1,0 +1,72 @@
+name: Publicar release
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Ambiente publicado
+        required: true
+        type: string
+      image_tag:
+        description: Tag imutável publicada em produção
+        required: true
+        type: string
+    outputs:
+      release_url:
+        description: URL do release criado
+        value: ${{ jobs.release.outputs.release_url }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_url: ${{ steps.create_release.outputs.url }}
+    steps:
+      - name: Preparar metadados do release
+        id: metadata
+        shell: bash
+        run: |
+          IMAGE_TAG='${{ inputs.image_tag }}'
+          COMMIT="${IMAGE_TAG#sha-}"
+          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "deployed_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Criar release no GitHub
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: forecast-release-${{ github.run_number }}
+          target_commitish: ${{ steps.metadata.outputs.commit }}
+          name: 'Forecast - ${{ inputs.environment }} #${{ github.run_number }}'
+          body: |
+            Release automática do Forecast de Importação.
+
+            - Ambiente: ${{ inputs.environment }}
+            - Commit publicado: `${{ steps.metadata.outputs.commit }}`
+            - Tag imutável: `${{ inputs.image_tag }}`
+            - Backend: `registry.wasion.com.br/wasion/forecast-backend:${{ inputs.image_tag }}`
+            - Frontend: `registry.wasion.com.br/wasion/forecast-frontend:${{ inputs.image_tag }}`
+            - Executado por: `${{ github.actor }}`
+            - GitHub Run: #${{ github.run_number }}
+            - Publicado em UTC: `${{ steps.metadata.outputs.deployed_at }}`
+            - Pipeline: ${{ steps.metadata.outputs.run_url }}
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Resumo do release
+        shell: bash
+        run: |
+          {
+            echo '## Release publicado'
+            echo ''
+            echo "- Ambiente: ${{ inputs.environment }}"
+            echo "- Commit: ${{ steps.metadata.outputs.commit }}"
+            echo "- Tag: ${{ inputs.image_tag }}"
+            echo "- URL: ${{ steps.create_release.outputs.url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
