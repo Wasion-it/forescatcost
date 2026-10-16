@@ -1,0 +1,54 @@
+name: Validação de desenvolvimento
+
+on:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    name: Preparar ambiente
+    uses: ./.github/workflows/includes-environment.yml
+    with:
+      environment: dev
+
+  test:
+    name: Validar projeto
+    needs: setup
+    uses: ./.github/workflows/includes-test.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  build:
+    name: Empacotar aplicação
+    needs: [setup, test]
+    uses: ./.github/workflows/includes-build.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  deploy:
+    name: Validar pacote de entrega
+    needs: [setup, build]
+    uses: ./.github/workflows/includes-deploy.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  report:
+    name: Resumo final
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [setup, test, build, deploy]
+    steps:
+      - name: Gerar resumo
+        run: |
+          {
+            echo '## Fluxo de desenvolvimento concluído'
+            echo ''
+            echo "- Projeto: ${{ needs.setup.outputs.project }}"
+            echo "- Ambiente: ${{ needs.setup.outputs.environment }}"
+            echo "- Testes: ${{ needs.test.result }}"
+            echo "- Build: ${{ needs.build.result }}"
+            echo "- Deploy package: ${{ needs.deploy.result }}"
+          } >> "$GITHUB_STEP_SUMMARY"

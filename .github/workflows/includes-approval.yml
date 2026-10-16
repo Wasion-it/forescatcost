@@ -1,0 +1,36 @@
+name: Aprovação do fluxo
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Ambiente de execução
+        required: true
+        type: string
+    outputs:
+      approval-status:
+        description: Status da aprovação
+        value: ${{ jobs.approval.outputs.approval-status }}
+
+jobs:
+  approval:
+    runs-on: ubuntu-latest
+    outputs:
+      approval-status: ${{ steps.approval.outputs.approval-status }}
+    steps:
+      - name: Registrar aprovação do fluxo
+        id: approval
+        shell: bash
+        run: |
+          echo 'approval-status=approved' >> "$GITHUB_OUTPUT"
+
+      - name: Resumo da aprovação
+        shell: bash
+        run: |
+          {
+            echo '## Aprovação do fluxo'
+            echo ''
+            echo "- Ambiente: ${{ inputs.environment }}"
+            echo '- Status: approved'
+            echo '- Produção continua protegida pelo GitHub Environment prod.'
+          } >> "$GITHUB_STEP_SUMMARY"
