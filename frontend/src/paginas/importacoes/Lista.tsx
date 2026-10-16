@@ -63,7 +63,7 @@ export function ListaImportacoes() {
             <input
               id="f-q"
               className="entrada"
-              placeholder="DI, IMP-00012 ou observação"
+              placeholder="IP, IMP-00012 ou observação"
               value={rascunho.q}
               onChange={(e) => setRascunho({ ...rascunho, q: e.target.value })}
             />
@@ -86,6 +86,7 @@ export function ListaImportacoes() {
               <option value="RASCUNHO">Rascunho</option>
               <option value="CALCULADO">Calculado</option>
               <option value="DESATUALIZADO">Precisa recalcular</option>
+              <option value="FECHADO">Fechado</option>
               <option value="CANCELADO">Cancelado</option>
             </select>
           </div>
@@ -139,7 +140,7 @@ export function ListaImportacoes() {
                 <thead>
                   <tr>
                     <th scope="col">Processo</th>
-                    <th scope="col">Declaração</th>
+                    <th scope="col">IP</th>
                     <th scope="col">Data</th>
                     <th scope="col">Tipo</th>
                     <th scope="col">Modal</th>
@@ -157,10 +158,10 @@ export function ListaImportacoes() {
                           {i.numero_processo}
                         </Link>
                       </td>
-                      <td>{i.numero_declaracao ?? <span className="suave">{i.tipo_declaracao} não registrada</span>}</td>
+                      <td>{i.numero_ip ?? <span className="suave">IP não gerada</span>}</td>
                       <td>
                         {data(i.data_referencia)}
-                        {!i.data_declaracao && <span className="suave"> (prevista)</span>}
+                        {!i.data_ip && <span className="suave"> (prevista)</span>}
                       </td>
                       <td>{i.tipo_importacao.nome}</td>
                       <td>{i.modal === "MARITIMO" ? "Marítimo" : "Aéreo"}</td>

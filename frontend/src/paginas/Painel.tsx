@@ -9,6 +9,7 @@ import type { Dashboard } from "../lib/tipos";
 const CORES_TIPO: Record<string, string> = {
   INDUSTRIALIZACAO: "var(--agua)",
   USO_CONSUMO: "var(--solimoes)",
+  ADICIONAR_ATIVO: "var(--folha)",
 };
 
 const NATUREZAS: Record<string, string> = {
@@ -198,7 +199,7 @@ function GraficoMensal({ dados }: { dados: Dashboard }) {
                 {mesCurto(s.competencia)}
               </text>
               <text x={x + larguraBarra / 2} y={altura - margem.base + 34} textAnchor="middle" className="eixo eixo-fraco">
-                {contagem[s.competencia] ? `${contagem[s.competencia]} DI` : ""}
+                {contagem[s.competencia] ? `${contagem[s.competencia]} IP` : ""}
               </text>
             </g>
           );

@@ -81,7 +81,7 @@ def dashboard(db: DB, _: Ler):
         )
         t["valor"] += ln.valor
 
-    data_ref = func.coalesce(Importacao.data_declaracao, Importacao.data_prevista)
+    data_ref = func.coalesce(Importacao.data_ip, Importacao.data_prevista)
     mes = func.date_trunc("month", data_ref)
     contagem = dict(
         db.execute(

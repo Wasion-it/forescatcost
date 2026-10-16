@@ -41,7 +41,7 @@ class _Base(BaseModel):
 
 
 class TransportadoraEntrada(_Base):
-    tipo_servico: Literal["LOCAL", "SECUNDARIO", "AMBOS"]
+    tipo_servico: Literal["LOCAL"] = "LOCAL"
 
 
 class DespachanteEntrada(_Base):

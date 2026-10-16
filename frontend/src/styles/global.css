@@ -469,6 +469,8 @@ textarea.entrada {
 /* ------------------------------------------------------------- Tabelas */
 
 .tabela-rolagem {
+  /* Contém textos .sr-only (absolutos) das células, que senão geram rolagem horizontal na página */
+  position: relative;
   overflow-x: auto;
 }
 
@@ -579,6 +581,10 @@ table.tabela {
 
 .status-desatualizado {
   color: var(--solimoes-escuro);
+}
+
+.status-fechado {
+  color: var(--agua);
 }
 
 .status-cancelado {
@@ -925,6 +931,83 @@ form > .cabecalho + .aviso + .painel {
   font-size: var(--t-xs);
 }
 
+/* Histórico (versões e alterações): abas e lista com altura limitada */
+.painel-topo-abas {
+  padding: 0 var(--e-2);
+  flex-wrap: nowrap;
+}
+
+.abas {
+  display: flex;
+  gap: var(--e-1);
+}
+
+.aba {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: 44px;
+  padding: 0 var(--e-3);
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-family: var(--fonte-estreita);
+  font-size: var(--t-lg);
+  font-weight: 500;
+  color: var(--tinta-suave);
+  cursor: pointer;
+}
+
+.aba:hover {
+  color: var(--tinta);
+}
+
+.aba[aria-selected="true"] {
+  color: var(--negro);
+  border-bottom-color: var(--solimoes);
+}
+
+.aba-contagem {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--varzea);
+  font-family: var(--fonte);
+  font-size: var(--t-xs);
+  line-height: 20px;
+  text-align: center;
+  color: var(--tinta-suave);
+}
+
+.historico-rolagem {
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.versao-selo {
+  margin-left: var(--e-2);
+  padding: 0 6px;
+  border: 1px solid var(--folha);
+  border-radius: var(--r-controle);
+  background: var(--folha-claro);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--folha);
+}
+
+.versao-motivo {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--tinta-suave);
+  font-size: var(--t-sm);
+}
+
 .comparacao {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -943,6 +1026,28 @@ form > .cabecalho + .aviso + .painel {
   font-size: var(--t-2xl);
   font-weight: 500;
   text-align: left;
+}
+
+/* Fechamento da despesa: provisionado, fatura e diferença lado a lado */
+.comparacao-tres {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e-3);
+}
+
+.comparacao-tres strong {
+  font-size: var(--t-xl);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .comparacao-tres {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-dialogo {
+  display: grid;
+  gap: var(--e-4);
 }
 
 .tabela-compacta td,

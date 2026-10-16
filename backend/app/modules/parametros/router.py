@@ -211,7 +211,9 @@ def nova_aliquota(dados: NovaAliquota, db: DB, usuario: Editar):
 def listar_componentes(db: DB, _: Ler):
     hoje = date.today()
     saida = []
-    for c in db.scalars(select(ComponenteCusto).order_by(ComponenteCusto.ordem)):
+    for c in db.scalars(
+        select(ComponenteCusto).where(ComponenteCusto.ativo.is_(True)).order_by(ComponenteCusto.ordem)
+    ):
         f = service.formula_vigente(c, hoje)
         saida.append(
             {

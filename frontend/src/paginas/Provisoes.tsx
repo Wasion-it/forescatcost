@@ -124,7 +124,7 @@ export function Provisoes() {
                   <th scope="col">{coluna}</th>
                   {visao === "por-processo" && (
                     <>
-                      <th scope="col">Declaração</th>
+                      <th scope="col">IP</th>
                       <th scope="col">Data</th>
                     </>
                   )}
@@ -152,7 +152,7 @@ export function Provisoes() {
                     </th>
                     {visao === "por-processo" && (
                       <>
-                        <td>{ln.numero_declaracao ?? <span className="suave">não registrada</span>}</td>
+                        <td>{ln.numero_ip ?? <span className="suave">não gerada</span>}</td>
                         <td>{data(ln.data_referencia)}</td>
                       </>
                     )}

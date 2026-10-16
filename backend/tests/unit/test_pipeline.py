@@ -17,17 +17,22 @@ from app.calculo.formulas_padrao import COMPONENTES_PADRAO
 D = Decimal
 
 PARAMETROS = {
-    "afrmm_percentual": D("0.08"),
     "tcif_valor_item": D("45"),
-    "tcif_valor_di": D("245"),
+    "tcif_valor_ip": D("250"),
     "tl_valor_container": D("1500"),
     "tl_percentual": D("0.0006"),
-    "ts_valor_container": D("1000"),
-    "ts_percentual": D("0.0001"),
     "arm_mar_pct_periodo1": D("0.0092"),
     "arm_mar_minimo": D("0"),
-    "despachante_honorario_di": D("900"),
-    "taxa_liberacao": D("350"),
+    "despachante_honorario_ip": D("900"),
+    "ii_suspenso": D("1"),
+    "ipi_suspenso": D("1"),
+    "siscomex_registro": D("115.67"),
+    "siscomex_adicao_faixa1": D("38.56"),
+    "siscomex_adicao_faixa2": D("30.85"),
+    "siscomex_adicao_faixa3": D("23.14"),
+    "siscomex_adicao_faixa4": D("15.42"),
+    "siscomex_adicao_faixa5": D("7.71"),
+    "siscomex_adicao_faixa6": D("3.86"),
 }
 ALIQUOTAS = {
     "II": D("0.14"),
@@ -52,6 +57,7 @@ ENTRADAS = Entradas(
     valor_siscomex=D("154.23"),
     peso_bruto=D("12000"),
     peso_liquido=D("11000"),
+    valor_taxa_liberacao=D("350"),
 )
 
 
@@ -59,27 +65,163 @@ def test_caso_referencia_maritimo_uso_consumo():
     """Caso calculado à mão (ver comentários) — serve como golden test inicial."""
     r = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
     esperado = {
-        "CIF": "60154.23",  # 50.000 + 10.000 + 154,23
-        "II": "8421.59",  # 60.154,23 × 14%
-        "IPI": "6857.58",  # (CIF + II) × 10%
-        "PIS": "1263.24",
-        "COFINS": "5804.88",
-        "AFRMM": "800.00",  # 10.000 × 8%
-        "ICMS": "18285.70",  # 83.301,52 / 0,82 × 0,18
-        "TCIF": "695.00",  # 10 × 45 + 245
-        "TRANSP_LOCAL": "3036.09",  # 2 × 1.500 + 0,06% × CIF
-        "TRANSP_SEC": "2006.02",  # 2 × 1.000 + 0,01% × CIF
-        "ARM_MARITIMA": "553.42",  # 0,92% × CIF
+        "CIF": "60000.00",  # 50.000 + 10.000 (valor aduaneiro, sem Siscomex)
+        "II": "0.00",  # suspenso (não paga)
+        "IPI": "0.00",  # suspenso (não paga)
+        "PIS": "1260.00",  # 2,1% × 60.000
+        "COFINS": "5790.00",  # 9,65% × 60.000
+        "TAXA_SISCOMEX": "154.23",
+        "ICMS": "14752.15",  # (60.000 + 154,23 + 1.260 + 5.790) / 0,82 × 0,18
+        "TCIF": "700.00",  # 10 × 45 + 250 (Lei 13.451/2017, art. 8º, § 2º)
+        "TRANSP_LOCAL": "3036.00",  # 2 × 1.500 + 0,06% × CIF
+        "ARM_MARITIMA": "552.00",  # 0,92% × CIF
         "ARM_AEREA": "0.00",
         "DESPACHANTE": "900.00",
-        "FRETE_INTL": "10350.00",
+        "FRETE_INTL": "10000.00",  # 2.000 USD × 5,00
+        "TAXA_LIBERACAO": "350.00",
     }
     assert {k: str(v.valor) for k, v in r.items()} == esperado
 
 
 def test_total_ignora_cif_base():
     resultado = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS)
-    assert resultado.total_provisionado == D("58973.52")
+    assert resultado.total_provisionado == D("37494.38")
+
+
+def test_sem_afrmm_nem_transporte_secundario():
+    r = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
+    assert "AFRMM" not in r
+    assert "TRANSP_SEC" not in r
+
+
+def test_suspensao_zera_ii_e_ipi_e_icms_parte_do_cif_mais_siscomex():
+    r = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
+    assert r["II"].valor == 0
+    assert r["IPI"].valor == 0
+    base_icms = r["CIF"].valor + r["TAXA_SISCOMEX"].valor + r["PIS"].valor + r["COFINS"].valor
+    assert r["ICMS"].valor == (base_icms / D("0.82") * D("0.18")).quantize(D("0.01"))
+
+
+def test_sem_suspensao_ii_e_ipi_voltam_e_icms_inclui_ambos():
+    parametros = {**PARAMETROS, "ii_suspenso": D("0"), "ipi_suspenso": D("0")}
+    r = calcular(ENTRADAS, COMPONENTES_PADRAO, parametros, ALIQUOTAS).por_codigo()
+    assert r["II"].valor == D("8400.00")  # 14% × 60.000 (sem Siscomex)
+    assert r["IPI"].valor == D("6840.00")  # 10% × (60.000 + 8.400)
+    base_icms = (
+        r["CIF"].valor
+        + r["TAXA_SISCOMEX"].valor
+        + r["II"].valor
+        + r["IPI"].valor
+        + r["PIS"].valor
+        + r["COFINS"].valor
+    )
+    assert r["ICMS"].valor == (base_icms / D("0.82") * D("0.18")).quantize(D("0.01"))
+    assert r["ICMS"].valor == D("18097.51")
+
+
+def test_suspensao_individual_de_ipi_mantem_ii():
+    parametros = {**PARAMETROS, "ii_suspenso": D("0")}
+    r = calcular(ENTRADAS, COMPONENTES_PADRAO, parametros, ALIQUOTAS).por_codigo()
+    assert r["II"].valor == D("8400.00")
+    assert r["IPI"].valor == 0
+
+
+def test_frete_e_taxa_de_liberacao_sao_itens_separados():
+    base = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
+    outra = calcular(
+        replace(ENTRADAS, valor_taxa_liberacao=D("520")), COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS
+    ).por_codigo()
+    assert base["FRETE_INTL"].valor == D("10000.00")
+    assert base["TAXA_LIBERACAO"].valor == D("350.00")
+    assert outra["TAXA_LIBERACAO"].valor == D("520.00")
+    assert outra["FRETE_INTL"].valor == base["FRETE_INTL"].valor
+    assert outra["ICMS"].valor == base["ICMS"].valor
+
+
+def test_taxa_siscomex_compoe_o_total():
+    resultado = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS)
+    siscomex = resultado.por_codigo()["TAXA_SISCOMEX"]
+    assert siscomex.valor == D("154.23")
+    assert siscomex.compoe_provisao is True
+
+
+def _siscomex(qtd_itens: int, informado: str = "0") -> Decimal:
+    entradas = replace(ENTRADAS, qtd_itens=qtd_itens, valor_siscomex=D(informado))
+    resultado = calcular(entradas, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS)
+    return resultado.por_codigo()["TAXA_SISCOMEX"].valor
+
+
+# Totais da tabela oficial (Portaria ME 4.131/2021): registro + adições por faixa
+@pytest.mark.parametrize(
+    ("qtd_itens", "esperado"),
+    [
+        (0, "115.67"),
+        (1, "154.23"),
+        (2, "192.79"),
+        (3, "223.64"),
+        (5, "285.34"),
+        (6, "308.48"),
+        (10, "401.04"),
+        (11, "416.46"),
+        (20, "555.24"),
+        (21, "562.95"),
+        (50, "786.54"),
+        (51, "790.40"),
+        (60, "825.14"),
+    ],
+)
+def test_siscomex_automatico_por_faixas_de_adicao(qtd_itens, esperado):
+    assert _siscomex(qtd_itens) == D(esperado)
+
+
+def test_siscomex_informado_prevalece_sobre_o_calculo():
+    assert _siscomex(10, informado="500.00") == D("500.00")
+
+
+def test_siscomex_fica_fora_do_cif_e_entra_so_no_icms():
+    entradas = replace(ENTRADAS, valor_siscomex=D("0"))  # 10 itens -> 401,04
+    r = calcular(entradas, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
+    assert r["TAXA_SISCOMEX"].valor == D("401.04")
+    assert r["CIF"].valor == D("60000.00")
+    assert r["PIS"].valor == D("1260.00")
+    assert r["ARM_MARITIMA"].valor == D("552.00")
+    assert r["ICMS"].variaveis["taxa_siscomex"] == "401.04"
+    base_icms = D("60000.00") + D("401.04") + r["PIS"].valor + r["COFINS"].valor
+    assert r["ICMS"].valor == (base_icms / D("0.82") * D("0.18")).quantize(D("0.01"))
+
+
+def test_cif_bate_com_o_valor_aduaneiro_da_di():
+    """DI do IMP-00010: FOB CNY 23.179,42 × 0,7727 e frete USD 175,17 × 5,1809.
+
+    Na DI o CIF é R$ 18.818,26 (17.910,73 + 907,53). O sistema arredonda a conversão e a DI
+    trunca, por isso o valor aqui fica 0,02 acima. A Taxa Siscomex (R$ 308,48) não entra.
+    """
+    entradas = replace(
+        ENTRADAS,
+        valor_invoice=D("23179.42"),
+        moeda_invoice="CNY",
+        taxa_cny=D("0.7727"),
+        valor_frete=D("175.17"),
+        taxa_usd=D("5.1809"),
+        valor_siscomex=D("308.48"),
+    )
+    r = calcular(entradas, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
+    assert r["CIF"].valor == D("18818.28")
+    assert r["CIF"].valor - D("18818.26") == D("0.02")
+
+
+def test_siscomex_informado_nao_exige_parametros_vigentes():
+    sem_params = {k: v for k, v in PARAMETROS.items() if not k.startswith("siscomex_")}
+    r = calcular(ENTRADAS, COMPONENTES_PADRAO, sem_params, ALIQUOTAS).por_codigo()
+    assert r["TAXA_SISCOMEX"].valor == D("154.23")
+
+
+def test_siscomex_automatico_sem_parametro_lista_problema():
+    sem_params = {k: v for k, v in PARAMETROS.items() if k != "siscomex_registro"}
+    entradas = replace(ENTRADAS, valor_siscomex=D("0"))
+    with pytest.raises(ErroCalculo) as exc:
+        calcular(entradas, COMPONENTES_PADRAO, sem_params, ALIQUOTAS)
+    assert any("siscomex_registro" in p for p in exc.value.problemas)
 
 
 def test_tcif_competencia_mes_seguinte_apos_dia_15():
@@ -121,7 +263,6 @@ def test_modal_aereo_usa_valor_manual_e_zera_maritimos():
     r = calcular(entradas, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
     assert r["ARM_AEREA"].valor == D("1234.56")
     assert r["ARM_MARITIMA"].valor == 0
-    assert r["AFRMM"].valor == 0
 
 
 def test_parametro_ausente_lista_problema():
@@ -141,8 +282,14 @@ def test_dependencia_circular_e_rejeitada():
 
 
 def test_memoria_registra_variaveis_usadas():
+    parametros = {**PARAMETROS, "ii_suspenso": D("0")}
+    r = calcular(ENTRADAS, COMPONENTES_PADRAO, parametros, ALIQUOTAS).por_codigo()
+    assert r["II"].variaveis == {"aliq.ii": "0.14", "cif": "60000.00", "p.ii_suspenso": "0"}
+
+
+def test_memoria_do_ii_suspenso_traz_so_o_parametro():
     r = calcular(ENTRADAS, COMPONENTES_PADRAO, PARAMETROS, ALIQUOTAS).por_codigo()
-    assert r["II"].variaveis == {"aliq.ii": "0.14", "cif": "60154.23"}
+    assert r["II"].variaveis == {"p.ii_suspenso": "1"}
 
 
 def test_mais_containers_nao_reduz_custo():

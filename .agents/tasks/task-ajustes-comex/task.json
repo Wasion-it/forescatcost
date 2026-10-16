@@ -1,0 +1,12 @@
+{
+  "task_id": "task-ajustes-comex",
+  "task_description": "Ajustes do Forecast de Importação (comex) pedidos pelo dono do negócio: tipo de importação Adicionar Ativo (honorário 900 do despachante); IP no lugar de DI; taxa de liberação variável por processo e separada do frete internacional; Siscomex entre os impostos; II e IPI suspensos (não pagos) por parâmetro; remover transporte secundário; remover AFRMM; fechamento da despesa com valor e número da fatura. Plano completo em c:\\Projects\\forecast\\.agents\\tasks\\plano-ajustes-comex.md.",
+  "status": "completed",
+  "feature_order": [
+    "FEAT-001",
+    "FEAT-002",
+    "FEAT-003",
+    "FEAT-004"
+  ],
+  "blocked_reason": null
+}

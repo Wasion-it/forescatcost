@@ -15,9 +15,8 @@ _seq = count(100)
 def payload(refs):
     n = next(_seq)
     return {
-        "tipo_declaracao": "DI",
-        "numero_declaracao": f"26/{n:07d}-0",
-        "data_declaracao": "2026-10-16",
+        "numero_ip": f"IP-26-{n:04d}",
+        "data_ip": "2026-10-16",
         "tipo_importacao_id": refs["tipos"]["USO_CONSUMO"],
         "modal": "MARITIMO",
         "valor_invoice": "10000.00",
@@ -28,10 +27,10 @@ def payload(refs):
         "qtd_containers": 2,
         "taxa_usd": "5.000000",
         "valor_siscomex": "154.23",
+        "valor_taxa_liberacao": "350.00",
         "peso_bruto_kg": "12000",
         "peso_liquido_kg": "11000",
         "transportadora_local_id": refs["transp"]["Rodo Norte Logística"],
-        "transportadora_secundaria_id": refs["transp"]["Via Rio Negro Cargas"],
         "despachante_id": refs["despachante"],
         "terminal_id": refs["term"]["Chibatão"],
     }
@@ -65,13 +64,22 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     calc = r.json()
     itens = {i["componente_codigo"]: i for i in calc["itens"]}
     # Mesmos valores do caso de referência do motor, com ICMS de 20% (alíquota de exemplo)
-    assert itens["CIF"]["valor"] == "60154.23"
-    assert itens["II"]["valor"] == "8421.59"
+    assert itens["CIF"]["valor"] == "60000.00"  # valor aduaneiro, sem Siscomex
+    assert itens["ICMS"]["memoria"]["variaveis"]["taxa_siscomex"] == "154.23"
+    assert itens["II"]["valor"] == "0.00"  # suspenso
+    assert itens["IPI"]["valor"] == "0.00"  # suspenso
+    assert itens["II"]["memoria"]["suspenso"] is True
+    assert itens["TAXA_SISCOMEX"]["valor"] == "154.23"
+    assert itens["TAXA_SISCOMEX"]["natureza"] == "IMPOSTO"
+    assert itens["TAXA_SISCOMEX"]["compoe_provisao"] is True
+    assert itens["FRETE_INTL"]["valor"] == "10000.00"
+    assert itens["TAXA_LIBERACAO"]["valor"] == "350.00"
     assert itens["DESPACHANTE"]["valor"] == "900.00"  # Uso e Consumo
-    assert itens["TRANSP_SEC"]["valor"] == "2006.02"
-    assert itens["TCIF"]["valor"] == "695.00"
-    assert itens["TCIF"]["competencia"] == "2026-11-01"  # DI no dia 16
+    assert "TRANSP_SEC" not in itens and "AFRMM" not in itens
+    assert itens["TCIF"]["valor"] == "700.00"  # 10 × 45 + 250
+    assert itens["TCIF"]["competencia"] == "2026-11-01"  # IP no dia 16
     assert itens["II"]["competencia"] == "2026-10-01"
+    assert "suspenso" not in itens["PIS"]["memoria"]
     assert itens["CIF"]["compoe_provisao"] is False
     assert "origens" in itens["DESPACHANTE"]["memoria"]
     assert len(calc["hash_integridade"]) == 64
@@ -79,6 +87,42 @@ def test_cadastro_calculo_e_valores(client, pcm, payload):
     detalhe = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
     assert detalhe["status"] == "CALCULADO"
     assert detalhe["calculo_vigente"]["numero_versao"] == 1
+
+
+def test_adicionar_ativo_cobra_honorario_de_900(client, pcm, refs, payload):
+    dados = {**payload, "tipo_importacao_id": refs["tipos"]["ADICIONAR_ATIVO"]}
+    imp = _criar(client, pcm, dados)
+    r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
+    assert r.status_code == 201, r.text
+    itens = {i["componente_codigo"]: i for i in r.json()["itens"]}
+    assert itens["DESPACHANTE"]["valor"] == "900.00"
+    assert itens["II"]["valor"] == "0.00"
+    assert itens["PIS"]["valor"] == "1260.00"  # alíquotas copiadas de Uso e Consumo
+
+
+def test_taxa_de_liberacao_varia_por_processo(client, pcm, payload):
+    totais = {}
+    for taxa in ("280.00", "510.00"):
+        dados = {
+            **payload,
+            "numero_ip": f"IP-26-{next(_seq):04d}",
+            "valor_taxa_liberacao": taxa,
+        }
+        imp = _criar(client, pcm, dados)
+        assert imp["valor_taxa_liberacao"] == taxa
+        r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
+        assert r.status_code == 201, r.text
+        itens = {i["componente_codigo"]: i["valor"] for i in r.json()["itens"]}
+        assert itens["TAXA_LIBERACAO"] == taxa
+        assert itens["FRETE_INTL"] == "10000.00"
+        totais[taxa] = Decimal(r.json()["total_provisionado"])
+    assert totais["510.00"] - totais["280.00"] == Decimal("230.00")
+
+
+def test_componentes_inativos_nao_aparecem(client, pcm):
+    codigos = {c["codigo"] for c in client.get("/api/v1/componentes", headers=pcm).json()}
+    assert not {"AFRMM", "TRANSP_SEC"} & codigos
+    assert {"TAXA_SISCOMEX", "TAXA_LIBERACAO", "FRETE_INTL"} <= codigos
 
 
 def test_recalculo_versiona_e_exige_motivo(client, pcm, payload):
@@ -98,6 +142,8 @@ def test_recalculo_versiona_e_exige_motivo(client, pcm, payload):
     previa = client.post(f"/api/v1/importacoes/{imp['id']}/calculos/previa", headers=pcm).json()
     assert previa["exige_motivo"] is True
     assert Decimal(previa["diferencas"]["CIF"]["diferenca"]) == Decimal("6000.00")
+    assert Decimal(previa["diferencas"]["FRETE_INTL"]["diferenca"]) == Decimal("1000.00")
+    assert Decimal(previa["diferencas"]["TAXA_LIBERACAO"]["diferenca"]) == Decimal("0.00")
 
     r = client.post(
         f"/api/v1/importacoes/{imp['id']}/calculos",
@@ -129,17 +175,31 @@ def test_validacoes_de_entrada(client, pcm, payload):
     assert r.status_code == 422
     assert "taxa CNY" in r.text
 
-    di_ruim = {**payload, "numero_declaracao": "123"}
-    assert client.post("/api/v1/importacoes", json=di_ruim, headers=pcm).status_code == 422
+    # IP é texto livre, sem formato fiscal; espaços são aparados e vazio vira nulo
+    livre = {**payload, "numero_ip": "  PROV/2026 #7  "}
+    r = client.post("/api/v1/importacoes", json=livre, headers=pcm)
+    assert r.status_code == 201
+    assert r.json()["numero_ip"] == "PROV/2026 #7"
+    assert "tipo_declaracao" not in r.json()
+    vazio = {**payload, "numero_ip": "   "}
+    r = client.post("/api/v1/importacoes", json=vazio, headers=pcm)
+    assert r.status_code == 201
+    assert r.json()["numero_ip"] is None
 
-    sem_data = {**payload, "data_declaracao": None}
-    assert client.post("/api/v1/importacoes", json=sem_data, headers=pcm).status_code == 422
+    sem_datas = {**payload, "data_ip": None, "data_prevista": None}
+    r = client.post("/api/v1/importacoes", json=sem_datas, headers=pcm)
+    assert r.status_code == 422
+    assert "data da IP ou a data prevista" in r.text
+
+    so_prevista = {**payload, "numero_ip": None, "data_ip": None, "data_prevista": "2026-12-01"}
+    assert client.post("/api/v1/importacoes", json=so_prevista, headers=pcm).status_code == 201
 
 
-def test_di_duplicada(client, pcm, payload):
+def test_ip_duplicada(client, pcm, payload):
     _criar(client, pcm, payload)
     r = client.post("/api/v1/importacoes", json=payload, headers=pcm)
     assert r.status_code == 409
+    assert "IP" in r.json()["detail"]
     assert "IMP-" in r.json()["detail"]
 
 
@@ -152,7 +212,7 @@ def test_financeiro_nao_cadastra_nem_calcula(client, financeiro, pcm, payload):
 
 
 def test_provisao_cancelamento_e_excel(client, pcm, financeiro, payload):
-    payload = {**payload, "data_declaracao": "2027-03-10"}  # mês isolado
+    payload = {**payload, "data_ip": "2027-03-10"}  # mês isolado
     imp = _criar(client, pcm, payload)
     client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
 
@@ -169,6 +229,8 @@ def test_provisao_cancelamento_e_excel(client, pcm, financeiro, payload):
     ).json()
     assert por_processo["linhas"][0]["rotulo"] == imp["numero_processo"]
     assert Decimal(por_processo["total"]) == total
+    assert por_processo["linhas"][0]["numero_ip"] == imp["numero_ip"]
+    assert "numero_declaracao" not in por_processo["linhas"][0]
 
     por_tipo = client.get("/api/v1/provisoes/por-tipo", params=params, headers=financeiro).json()
     assert por_tipo["linhas"][0]["chave"] == "USO_CONSUMO"
@@ -181,6 +243,12 @@ def test_provisao_cancelamento_e_excel(client, pcm, financeiro, payload):
     # Excel armazena números em ponto flutuante; comparamos em centavos
     valor_excel = Decimal(str(planilha.cell(ultima, planilha.max_column).value))
     assert valor_excel.quantize(Decimal("0.01")) == total
+
+    r = client.get("/api/v1/provisoes/por-processo/excel", params=params, headers=financeiro)
+    assert r.status_code == 200
+    cabecalho = [c.value for c in load_workbook(io.BytesIO(r.content)).active[5]]  # linha 5
+    assert "IP" in cabecalho
+    assert "DI/DUIMP" not in cabecalho
 
     r = client.post(
         f"/api/v1/importacoes/{imp['id']}/cancelar",

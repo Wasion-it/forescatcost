@@ -16,6 +16,7 @@ from app.modules.importacoes.schemas import (
     CalculoResumo,
     CalculoSaida,
     Cancelamento,
+    FechamentoDespesa,
     ImportacaoAtualizacao,
     ImportacaoDetalhe,
     ImportacaoEntrada,
@@ -37,6 +38,7 @@ def _detalhe(db: Session, imp) -> ImportacaoDetalhe:
     detalhe = ImportacaoDetalhe.model_validate(imp)
     if vigente:
         detalhe.calculo_vigente = CalculoSaida.model_validate(calculo_service.para_saida(vigente))
+    detalhe.despesas_fechadas = service.despesas_fechadas(db, imp)
     return detalhe
 
 
@@ -47,7 +49,7 @@ def listar(
     q: str | None = None,
     tipo: str | None = None,
     status_: Annotated[
-        Literal["RASCUNHO", "CALCULADO", "CANCELADO", "DESATUALIZADO"] | None,
+        Literal["RASCUNHO", "CALCULADO", "FECHADO", "CANCELADO", "DESATUALIZADO"] | None,
         Query(alias="status"),
     ] = None,
     de: date | None = None,
@@ -62,10 +64,9 @@ def listar(
         {
             "id": imp.id,
             "numero_processo": imp.numero_processo,
-            "tipo_declaracao": imp.tipo_declaracao,
-            "numero_declaracao": imp.numero_declaracao,
+            "numero_ip": imp.numero_ip,
             "data_referencia": imp.data_referencia,
-            "data_declaracao": imp.data_declaracao,
+            "data_ip": imp.data_ip,
             "tipo_importacao": imp.tipo_importacao,
             "modal": imp.modal,
             "status": imp.status,
@@ -100,6 +101,13 @@ def atualizar(importacao_id: UUID, dados: ImportacaoAtualizacao, db: DB, _: Edit
 @router.post("/{importacao_id}/cancelar", response_model=ImportacaoDetalhe)
 def cancelar(importacao_id: UUID, dados: Cancelamento, db: DB, _: Editar):
     imp = service.cancelar(db, service.obter(db, importacao_id), dados.motivo)
+    db.commit()
+    return _detalhe(db, imp)
+
+
+@router.post("/{importacao_id}/fechar", response_model=ImportacaoDetalhe)
+def fechar(importacao_id: UUID, dados: FechamentoDespesa, db: DB, usuario: Editar):
+    imp = service.fechar(db, service.obter(db, importacao_id), dados, usuario)
     db.commit()
     return _detalhe(db, imp)
 

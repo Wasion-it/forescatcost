@@ -14,16 +14,16 @@ flowchart TD
     CIF --> PIS[PIS]
     CIF --> COFINS[COFINS]
     II --> IPI[IPI]
-    CONV --> AFRMM[AFRMM<br/>modal marítimo]
-    CIF & II & IPI & PIS & COFINS & AFRMM --> ICMS[ICMS por dentro]
+    E --> SISC[Taxa Siscomex]
+    CIF & SISC & II & IPI & PIS & COFINS --> ICMS[ICMS por dentro]
     E --> TCIF[TCIF]
     CIF --> TL[Transporte local]
-    CIF --> TS[Transporte secundário]
     CIF --> AM[Armazenagem marítima]
     CIF --> AA[Armazenagem aérea]
     E --> DESP[Despachante]
-    CONV --> FI[Frete internacional + liberação]
-    ICMS & TCIF & TL & TS & AM & AA & DESP & FI --> TOT[Total provisionado<br/>soma dos itens com compoe_provisao]
+    CONV --> FI[Frete internacional]
+    E --> LIB[Taxa de liberação]
+    SISC & ICMS & TCIF & TL & AM & AA & DESP & FI & LIB --> TOT[Total provisionado<br/>soma dos itens com compoe_provisao]
     TOT --> COMP[Atribuição de competência]
 ```
 
@@ -33,9 +33,9 @@ flowchart TD
 |----------|--------|
 | `invoice_brl`, `frete_brl`, `seguro_brl` | Valor × taxa da moeda (RN01) |
 | `valor_invoice`, `valor_frete`, `taxa_usd`, `taxa_cny` | Entrada |
-| `siscomex`, `qtd_itens`, `qtd_containers`, `peso_bruto`, `peso_liquido` | Entrada |
+| `siscomex` (valor informado; 0 = calcular), `valor_taxa_liberacao`, `qtd_itens`, `qtd_containers`, `peso_bruto`, `peso_liquido` | Entrada |
 | `modal`, `tipo_importacao` | Entrada (texto, para condições) |
-| `cif`, `ii`, `ipi`, `pis`, `cofins`, `afrmm`, `icms`, ... | Resultado de componentes anteriores |
+| `cif`, `ii`, `ipi`, `pis`, `cofins`, `icms`, ... | Resultado de componentes anteriores |
 | `valor_carga` | Alias configurável (padrão: `cif`), pendente de confirmação |
 | `aliq.<imposto>` | Alíquota vigente (ou override do processo) |
 | `p.<chave>` | Parâmetro vigente resolvido no escopo do processo (tipo, transportadora, despachante, terminal) |
@@ -48,40 +48,44 @@ As fórmulas de impostos são uma proposta baseada na sistemática usual de impo
 
 | Componente | Expressão padrão | Provisão | Competência |
 |------------|------------------|----------|-------------|
-| CIF | `invoice_brl + frete_brl + siscomex` | Não (base) | – |
-| II | `cif * aliq.ii` | Sim | Mês da DI |
-| IPI | `(cif + ii) * aliq.ipi` | Sim | Mês da DI |
-| PIS | `cif * aliq.pis` | Sim | Mês da DI |
-| COFINS | `cif * aliq.cofins` | Sim | Mês da DI |
-| AFRMM | `se(modal == 'MARITIMO', frete_brl * p.afrmm_percentual, 0)` | Sim | Mês da DI |
-| ICMS | `(cif + ii + ipi + pis + cofins + afrmm + p.icms_outras_despesas) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da DI |
-| TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_di` | Sim | Corte dia 15 |
-| Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da DI |
-| Transporte secundário | `qtd_containers * p.ts_valor_container + valor_carga * p.ts_percentual` | Sim | Mês da DI |
-| Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da DI |
-| Armazenagem aérea | Pendente. Até a definição: `p.arm_aerea_valor_manual` | Sim | Mês da DI |
-| Despachante | `p.despachante_honorario_di` | Sim | Mês da DI |
-| Frete internacional | `frete_brl + p.taxa_liberacao` | A confirmar | Mês da DI |
+| CIF | `invoice_brl + frete_brl` (valor aduaneiro, sem Siscomex) | Não (base) | – |
+| II | `se(p.ii_suspenso == 1, 0, cif * aliq.ii)` | Sim | Mês da IP |
+| IPI | `se(p.ipi_suspenso == 1, 0, (cif + ii) * aliq.ipi)` | Sim | Mês da IP |
+| PIS | `cif * aliq.pis` | Sim | Mês da IP |
+| COFINS | `cif * aliq.cofins` | Sim | Mês da IP |
+| Taxa Siscomex | `se(siscomex > 0, siscomex, p.siscomex_registro + <adições por faixa>)`, ver abaixo | Sim | Mês da IP |
+| ICMS | `(cif + taxa_siscomex + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da IP |
+| TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_ip` | Sim | Corte dia 15 |
+| Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da IP |
+| Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da IP |
+| Armazenagem aérea | Pendente. Até a definição: `p.arm_aerea_valor_manual` | Sim | Mês da IP |
+| Despachante | `p.despachante_honorario_ip` | Sim | Mês da IP |
+| Frete internacional | `frete_brl` | Sim | Mês da IP |
+| Taxa de liberação | `valor_taxa_liberacao` (informada em cada processo) | Sim | Mês da IP |
 
 Valores iniciais dos parâmetros:
 
 | Chave | Escopo | Valor inicial |
 |-------|--------|---------------|
 | `tcif_valor_item` | Global | 45,00 |
-| `tcif_valor_di` | Global | 245,00 |
+| `tcif_valor_ip` | Global | 250,00 (Lei 13.451/2017, art. 8º, § 2º) |
 | `competencia_dia_corte` | Global | 15 |
 | `tl_valor_container` | Transportadora | a cadastrar |
 | `tl_percentual` | Transportadora | 0,0006 (0,06%) |
-| `ts_valor_container` | Transportadora | 1.000,00 |
-| `ts_percentual` | Transportadora | 0,0001 (0,01%) |
 | `arm_mar_pct_periodo1` | Terminal | 0,0092 (0,92%) |
 | `arm_mar_minimo` | Terminal | 0 (a confirmar) |
-| `despachante_honorario_di` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo) |
-| `afrmm_percentual` | Global | 0,08 (validar com Fiscal) |
-| `taxa_liberacao` | Global/agente | a cadastrar |
+| `despachante_honorario_ip` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo e Adicionar Ativo) |
+| `siscomex_registro` | Global | 115,67 (por DI/Duimp) |
+| `siscomex_adicao_faixa1` a `faixa6` | Global | 38,56 / 30,85 / 23,14 / 15,42 / 7,71 / 3,86 (por adição: 1ª-2ª, 3ª-5ª, 6ª-10ª, 11ª-20ª, 21ª-50ª, 51ª em diante) |
+| `ii_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
+| `ipi_suspenso` | Tipo de importação | 1 (suspenso, não paga). Booleano: 0 ou 1 |
 
-Atenção a dois pontos:
-- Como o CIF atual já inclui o Siscomex, a fórmula do ICMS não soma o Siscomex de novo. Se o Fiscal decidir tirar o Siscomex do CIF, as duas fórmulas mudam juntas (nova versão de ambas).
+Atenção a estes pontos:
+- Taxa Siscomex automática: como o sistema é de provisão, o valor real ainda não existe. Se o campo "Taxa Siscomex" do processo ficar vazio (0), o motor calcula `siscomex_registro` + soma das adições por faixa (Portaria ME 4.131/2021). Se o usuário informar um valor maior que zero, ele prevalece. O número de adições é estimado por `qtd_itens` (cada adição agrupa um ou mais itens, então a estimativa é conservadora). Exemplo: 10 itens = 115,67 + 2×38,56 + 3×30,85 + 5×23,14 = 401,04. Os valores são parâmetros com vigência; se a Receita reajustar, cadastre nova vigência em Parâmetros, sem mexer na fórmula.
+- Siscomex fora do CIF: o CIF é o valor aduaneiro (FOB + frete), igual ao da DI. A Taxa Siscomex não entra na base de II, IPI, PIS, COFINS, armazenagem e transporte. Ela entra só na base do ICMS, pelo componente `taxa_siscomex` (valor informado ou calculado). Validado com a DI do IMP-00010: CIF da DI R$ 18.818,26, sem a taxa de R$ 308,48. A diferença de R$ 0,02 vem do arredondamento da conversão (a DI trunca). O componente Taxa Siscomex (grupo de impostos) mostra o valor e compõe a provisão.
+- Com II e IPI suspensos (padrão), os dois valem 0,00 e o ICMS parte de CIF + Siscomex + PIS + COFINS. Com `ii_suspenso` ou `ipi_suspenso` = 0 para um tipo, a fórmula volta a calcular o imposto e o ICMS o inclui. A memória do item guarda `suspenso: true` quando a suspensão se aplica.
+- A taxa de liberação é um componente próprio e vem do processo, nunca de um parâmetro fixo.
+- AFRMM e transporte secundário foram removidos. Os componentes ficam inativos no banco só para preservar o histórico de cálculos antigos.
 - O frete aparece no CIF (base) e no componente "Frete internacional" (desembolso). Por isso o total soma apenas itens com `compoe_provisao = true` (RN20).
 
 ## 4. Regra de competência
@@ -95,7 +99,7 @@ def competencia(data_ref: date, regra: RegraCompetencia, dia_corte: int) -> date
     return inicio_mes
 ```
 
-`data_ref` = data da DI. Se ainda não houver DI, usa a data prevista. Isso define a competência inicial. Quando a DI for registrada, o recálculo pode mover a competência, e a mudança fica visível na comparação de versões.
+`data_ref` = data da IP. Se ainda não houver IP, usa a data prevista. Isso define a competência inicial. Quando a IP for informada, o recálculo pode mover a competência, e a mudança fica visível na comparação de versões.
 
 ## 5. Avaliação segura de fórmulas
 
@@ -121,11 +125,11 @@ Cada `calculo_item.memoria` guarda o suficiente para reproduzir e explicar o val
 {
   "componente": "ICMS",
   "formula_versao": 1,
-  "expressao": "(cif + ii + ipi + pis + cofins + afrmm + p.icms_outras_despesas) / (1 - aliq.icms) * aliq.icms",
+  "expressao": "(cif + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms",
   "variaveis": {
     "cif": "152340.55", "ii": "0.00", "ipi": "0.00",
-    "pis": "3199.15", "cofins": "14700.86", "afrmm": "1230.40",
-    "p.icms_outras_despesas": "0.00", "aliq.icms": "0.180000"
+    "pis": "3199.15", "cofins": "14700.86",
+    "aliq.icms": "0.180000"
   },
   "origem_aliquota": {"aliq.icms": "TABELA vigente desde 2026-01-01"},
   "valor_bruto": "37639.9668...",
@@ -140,7 +144,7 @@ O `calculo.hash_integridade` (SHA-256 das entradas, parâmetros e resultados) pe
 
 ## 8. Estratégia de testes do motor
 
-1. Golden cases: coletar de 20 a 30 processos reais já calculados nas planilhas (os dois tipos, os dois modais, DI antes e depois do dia 15, moedas USD e CNY). Eles viram testes automatizados com tolerância de R$ 0,01 por componente.
+1. Golden cases: coletar de 20 a 30 processos reais já calculados nas planilhas (os dois tipos, os dois modais, IP antes e depois do dia 15, moedas USD e CNY). Eles viram testes automatizados com tolerância de R$ 0,01 por componente.
 2. Testes unitários por componente e pela regra de competência (dias 15, 16, 31, virada de ano).
 3. Testes de propriedade (Hypothesis): valores nunca negativos, monotonicidade (mais containers não reduz o custo), determinismo.
 4. Período paralelo: 1 a 2 ciclos de fechamento rodando sistema e planilha juntos, com relatório de divergências.

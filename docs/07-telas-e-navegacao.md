@@ -12,7 +12,7 @@
 | T06 | Prévia de cálculo / confirmação de recálculo | PCM | MVP |
 | T07 | Simulação de cenários | PCM, Fin | R1 |
 | T08 | Provisão mensal | PCM, Fin | MVP |
-| T09 | Provisão por DI | PCM, Fin | MVP |
+| T09 | Provisão por IP | PCM, Fin | MVP |
 | T10 | Provisão por tipo de importação | PCM, Fin | MVP |
 | T11 | Fechamento de competência | Fin, Admin | R1 |
 | T12 | Parâmetros gerais (com vigência) | PCM, Admin | MVP |
@@ -45,9 +45,10 @@ flowchart LR
     T05 -->|Simular| T07[T07 Simulação]
     T05 -->|Editar| T04
     T05 -->|Cancelar processo| T05
+    T05 -->|Fechar despesa| T05
 
     FIN --> T08[T08 Provisão mensal]
-    FIN --> T09[T09 Provisão por DI]
+    FIN --> T09[T09 Provisão por IP]
     FIN --> T10[T10 Provisão por tipo]
     FIN --> T11[T11 Fechamento]
     T08 -->|drill-down| T09
@@ -72,12 +73,12 @@ flowchart LR
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ Importações                                          [+ Nova importação]  │
 ├───────────────────────────────────────────────────────────────────────────┤
-│ Período [01/10/26–31/10/26]  Tipo [Todos ▾]  Status [Todos ▾]  DI [_____] │
+│ Período [01/10/26–31/10/26]  Tipo [Todos ▾]  Status [Todos ▾]  IP [_____] │
 │ Transportadora [Todas ▾]                         [Limpar] [Filtrar]       │
 ├──────────┬──────────────┬──────────┬──────────┬───────────┬───────────────┤
-│ Processo │ DI/DUIMP     │ Data DI  │ Tipo     │ Status    │ Total prov.   │
+│ Processo │ IP           │ Data IP  │ Tipo     │ Status    │ Total prov.   │
 ├──────────┼──────────────┼──────────┼──────────┼───────────┼───────────────┤
-│ IMP-0142 │ 26/1234567-8 │ 16/10/26 │ Industr. │ Calculado │ R$ 98.430,12  │
+│ IMP-0142 │ IP-26-0001   │ 16/10/26 │ Industr. │ Calculado │ R$ 98.430,12  │
 │ IMP-0143 │ (prevista)   │ 25/10/26 │ Uso/Cons │ Rascunho  │ –             │
 │ IMP-0144 │ 26/1234590-1 │ 03/10/26 │ Industr. │ ⚠ Desatual│ R$ 41.220,00  │
 └──────────┴──────────────┴──────────┴──────────┴───────────┴───────────────┘
@@ -105,8 +106,8 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 
 ### T05: Detalhe da importação
 ```
-┌─ IMP-0142 · DI 26/1234567-8 · Industrialização · Marítimo ── [Calculado] ─┐
-│ [Editar] [Recalcular] [Simular] [Cancelar processo] [Exportar]            │
+┌─ IMP-0142 · IP-26-0001      · Industrialização · Marítimo ── [Calculado] ─┐
+│ [Editar] [Recalcular] [Simular] [Fechar despesa] [Cancelar] [Exportar]    │
 ├───────────────────────────────────────────────────────────────────────────┤
 │ [Resumo] [Memória de cálculo] [Versões (3)] [Auditoria]                   │
 ├───────────────────────────────────────────────────────────────────────────┤
@@ -115,14 +116,16 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 │ II                      │ 213.975,03   │ 0,00%       │       0,00 │ 10/26 │
 │ PIS                     │ 213.975,03   │ x,xx%       │   x.xxx,xx │ 10/26 │
 │ ...                     │              │             │            │       │
-│ TCIF                    │ 12 itens     │ 45 + 245    │     785,00 │ 11/26 │
-│ Transporte secundário   │ 2 cont.      │ 1.000+0,01% │   2.021,40 │ 10/26 │
-│ Despachante             │ 1 DI         │ Industr.    │     715,00 │ 10/26 │
+│ TCIF                    │ 12 itens     │ 45 + 250    │     790,00 │ 11/26 │
+│ Transporte local        │ 2 cont.      │ 1.500+0,06% │   3.128,39 │ 10/26 │
+│ Despachante             │ 1 IP         │ Industr.    │     715,00 │ 10/26 │
 ├─────────────────────────┴──────────────┴─────────────┴────────────┴───────┤
 │ Total provisionado: R$ 98.430,12   Versão 3 · 17/10/26 14:02 · j.silva    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 Ao clicar em um componente, abre o painel lateral com a fórmula, as variáveis, a origem dos parâmetros e a vigência.
+
+"Fechar despesa" abre um diálogo com o número da fatura e uma tabela com o valor realizado de cada item da despesa (provisionado ao lado, todos obrigatórios, com o total e a diferença para a provisão) e só aparece para processo calculado e sem recálculo pendente. Depois do fechamento, o status vira "Fechado", os botões Editar, Recalcular e Cancelar processo somem e o detalhe mostra a fatura, a data e quem fechou. Na lateral, versões do cálculo e alterações ficam em um único painel de histórico com abas (cada lista rola dentro do painel, com altura máxima). A fita de cálculo ganha, ao lado de cada item, as colunas Realizado e Diferença (realizado menos provisionado), com subtotais por grupo e o total realizado no rodapé. Isso é o fechamento da despesa do processo, diferente do fechamento de competência (T11).
 
 ### T07: Simulação
 ```
@@ -130,7 +133,7 @@ Ao clicar em um componente, abre o painel lateral com a fórmula, as variáveis,
 │ Variáveis                  │ Componente        │ Vigente  │ Cenário │ Δ   │
 │ Taxa USD [5,4210] → [5,90] │ CIF               │ 213.975  │ 216.274 │ +1% │
 │ Taxa CNY [0,7512] → [0,75] │ ICMS              │  …       │  …      │ …   │
-│ Containers [2] → [3]       │ Transp. secundário│ 2.021    │ 3.021   │ +49%│
+│ Containers [2] → [3]       │ Transp. local     │ 3.128    │ 4.628   │ +48%│
 │ Alíq. ICMS [..] → [..]     │ TOTAL             │ 98.430   │ 101.9xx │+3,5%│
 │ [Restaurar] [Salvar cenário] [Exportar] [Promover ao processo]            │
 └───────────────────────────────────────────────────────────────────────────┘

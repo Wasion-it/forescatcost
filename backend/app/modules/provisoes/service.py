@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.erros import ErroNegocio
-from app.models import Calculo, CalculoItem, Importacao, TipoImportacao
+from app.models import Calculo, CalculoItem, ComponenteCusto, Importacao, TipoImportacao
 
 MAX_MESES = 24
 ZERO = Decimal(0)
@@ -30,7 +30,7 @@ class Linha:
     valor: Decimal
     importacao_id: str
     numero: int
-    numero_declaracao: str | None
+    numero_ip: str | None
     data_referencia: date | None
     tipo_codigo: str
     tipo_nome: str
@@ -51,7 +51,7 @@ def meses(de: date, ate: date) -> list[date]:
 
 
 def buscar_linhas(db: Session, de: date, ate: date, tipo: str | None = None) -> list[Linha]:
-    data_ref = func.coalesce(Importacao.data_declaracao, Importacao.data_prevista)
+    data_ref = func.coalesce(Importacao.data_ip, Importacao.data_prevista)
     consulta = (
         select(
             CalculoItem.competencia,
@@ -62,16 +62,18 @@ def buscar_linhas(db: Session, de: date, ate: date, tipo: str | None = None) -> 
             CalculoItem.valor,
             Importacao.id,
             Importacao.numero,
-            Importacao.numero_declaracao,
+            Importacao.numero_ip,
             data_ref,
             TipoImportacao.codigo,
             TipoImportacao.nome,
         )
         .join(Calculo, Calculo.id == CalculoItem.calculo_id)
+        .join(ComponenteCusto, ComponenteCusto.id == CalculoItem.componente_id)
         .join(Importacao, Importacao.id == Calculo.importacao_id)
         .join(TipoImportacao, TipoImportacao.id == Importacao.tipo_importacao_id)
         .where(
             Calculo.vigente.is_(True),
+            ComponenteCusto.ativo.is_(True),
             Importacao.status != "CANCELADO",
             CalculoItem.compoe_provisao.is_(True),
             CalculoItem.competencia >= de.replace(day=1),
@@ -133,7 +135,7 @@ def por_processo(db: Session, de: date, ate: date, tipo: str | None) -> dict:
         extra=lambda ln: {
             "chave": ln.importacao_id,
             "rotulo": f"IMP-{ln.numero:05d}",
-            "numero_declaracao": ln.numero_declaracao,
+            "numero_ip": ln.numero_ip,
             "data_referencia": ln.data_referencia.isoformat() if ln.data_referencia else None,
             "tipo_codigo": ln.tipo_codigo,
             "tipo_nome": ln.tipo_nome,
@@ -156,7 +158,7 @@ def por_tipo(db: Session, de: date, ate: date, tipo: str | None) -> dict:
 
 VISOES = {
     "mensal": (mensal, "Provisão mensal por componente", "Componente"),
-    "por-processo": (por_processo, "Provisão por processo (DI)", "Processo"),
+    "por-processo": (por_processo, "Provisão por processo (IP)", "Processo"),
     "por-tipo": (por_tipo, "Provisão por tipo de importação", "Tipo de importação"),
 }
 
@@ -198,7 +200,7 @@ def gerar_excel(visao: str, dados: dict, filtros: str, emitido_por: str) -> byte
     extras: list[tuple[str, str]] = []
     if visao == "por-processo":
         extras = [
-            ("numero_declaracao", "DI/DUIMP"),
+            ("numero_ip", "IP"),
             ("data_referencia", "Data"),
             ("tipo_nome", "Tipo"),
         ]

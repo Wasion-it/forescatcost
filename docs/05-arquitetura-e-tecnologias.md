@@ -138,7 +138,7 @@ forecast/
 | POST | `/api/v1/calculos/lote/impacto` / `/lote` | Avaliar impacto / recalcular em lote |
 | GET/POST | `/api/v1/parametros`, `/aliquotas`, `/formulas` | Parametrização com vigência |
 | POST | `/api/v1/formulas/{id}/testar`, `/aprovar`, `/publicar` | Ciclo de vida da fórmula |
-| GET | `/api/v1/provisoes?agrupar=competencia,componente` | Provisões (mensal, por DI, por tipo) |
+| GET | `/api/v1/provisoes?agrupar=competencia,componente` | Provisões (mensal, por IP, por tipo) |
 | GET | `/api/v1/provisoes/export.xlsx` | Exportação Excel |
 | POST | `/api/v1/competencias/{mes}/fechar`, `/reabrir` | Fechamento |
 | GET | `/api/v1/dashboard/indicadores` | KPIs |

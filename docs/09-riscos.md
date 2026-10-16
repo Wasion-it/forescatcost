@@ -8,7 +8,7 @@ Escala: P = probabilidade, I = impacto (B baixo, M médio, A alto).
 | R02 | Planilhas atuais contêm erros e o sistema "replica o erro" ou diverge sem explicação | M | A | Período paralelo com relatório de divergências, decisão documentada sobre qual valor está correto | PCM + Fiscal |
 | R03 | Tributação da ZFM e benefícios por tipo de importação mal parametrizados | M | A | Validação formal das alíquotas efetivas pelo Fiscal, override por processo com justificativa | Fiscal |
 | R04 | Reforma Tributária (CBS/IBS e transição de PIS/COFINS/ICMS) muda bases e tributos durante o projeto | A | M | Impostos e fórmulas parametrizáveis com vigência, item de backlog dedicado (B34), acompanhamento com o Fiscal | Fiscal + PO |
-| R05 | Migração DI → DUIMP muda formato, dados e momento do registro | A | M | Modelo com `tipo_declaracao`, máscaras configuráveis, competência baseada em data configurável | Arquiteto |
+| R05 | Mudança no formato ou no momento da declaração aduaneira real não afeta a provisão, que usa a IP | A | M | IP em texto livre (`numero_ip`), sem máscara fiscal; competência baseada em data configurável (`data_ip` ou data prevista) | Arquiteto |
 | R06 | Flexibilidade excessiva de fórmulas gera erros e perda de controle | M | A | Avaliador restrito, testes obrigatórios na publicação, aprovação por 4 olhos, versionamento | Admin + Arquiteto |
 | R07 | Erros de arredondamento ou uso de float | M | M | `Decimal`/`NUMERIC` ponta a ponta, serialização como string, testes de propriedade | Tech lead |
 | R08 | Baixa adoção: usuários continuam na planilha | M | A | Usuários-chave no desenvolvimento, UX focada em velocidade (colar do Excel, valores padrão), desligamento formal da planilha após o aceite | Patrocinador |

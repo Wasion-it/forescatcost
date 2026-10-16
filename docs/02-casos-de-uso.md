@@ -35,7 +35,7 @@ flowchart LR
         UC11[UC11 Manter fórmulas e componentes]
         UC12[UC12 Manter transportadoras, despachantes e terminais]
         UC13[UC13 Consultar provisão mensal]
-        UC14[UC14 Consultar provisão por DI]
+        UC14[UC14 Consultar provisão por IP]
         UC15[UC15 Consultar provisão por tipo]
         UC16[UC16 Exportar Excel]
         UC17[UC17 Visualizar dashboard]
@@ -63,7 +63,7 @@ flowchart LR
 Fluxo principal:
 1. O usuário acessa Importações > Nova.
 2. O sistema exibe o formulário com valores padrão (moedas, tipo, despachante padrão do tipo).
-3. O usuário informa tipo de declaração (DI/DUIMP), número (opcional), data da DI ou data prevista, tipo de importação, modal, invoice e moeda, frete e moeda, quantidade de itens e containers, taxas de câmbio, Siscomex, pesos, transportadora, despachante, terminal e observações.
+3. O usuário informa o número da IP (opcional, texto livre), data da IP ou data prevista, tipo de importação, modal, invoice e moeda, frete e moeda, quantidade de itens e containers, taxas de câmbio, Siscomex, pesos, transportadora, despachante, terminal e observações.
 4. O sistema valida os campos (RN01, RN19) e mostra prévia dos valores em BRL.
 5. O usuário clica em "Salvar e calcular".
 6. O sistema salva o processo e executa o UC06.
@@ -71,13 +71,30 @@ Fluxo principal:
 
 Fluxos alternativos:
 - 5a. "Salvar rascunho": salva sem calcular (status RASCUNHO).
-- 4a. Número de DI duplicado: bloqueia e indica o processo existente.
+- 4a. Número de IP duplicado: bloqueia e indica o processo existente.
 - 4b. Moeda sem taxa informada: bloqueia e destaca o campo.
 - 6a. Falta parâmetro vigente para algum componente: salva como RASCUNHO e lista as pendências.
 
+### UC22: Fechar a despesa do processo
+- Ator: Analista PCM (`importacao:editar`)
+- Pré-condições: processo CALCULADO, sem recálculo pendente. Não confundir com o fechamento de competência (UC18).
+- Pós-condição: processo FECHADO, com valor da fatura, número da fatura, data/hora e usuário do fechamento, e auditoria da alteração (RN23).
+
+Fluxo principal:
+1. No detalhe do processo, o usuário aciona "Fechar despesa".
+2. O usuário informa o valor realizado de cada item da despesa (zero ou mais, 2 casas; o total deve ser maior que zero) e o número da fatura (até 60 caracteres).
+3. O sistema valida os campos e a versão do processo (controle otimista).
+4. O sistema grava o fechamento e o processo passa a FECHADO. A provisão não muda.
+
+Fluxos alternativos:
+- 3a. Processo em rascunho: orienta a calcular antes. Com recálculo pendente: orienta a recalcular antes.
+- 3b. Processo já fechado ou cancelado: bloqueia.
+- 3c. Outra pessoa alterou o processo (versão diferente): bloqueia e pede para recarregar.
+- Depois de fechado, o processo não pode ser editado, recalculado nem cancelado.
+
 ### UC06: Calcular / recalcular importação
 - Ator: Analista PCM (ou Agendador, em lote)
-- Pré-condições: processo não cancelado. Competência não fechada (RN17).
+- Pré-condições: processo não cancelado e não fechado (UC22). Competência não fechada (RN17).
 - Pós-condição: nova versão de cálculo vigente, anterior preservada (RN13).
 
 Fluxo principal:
@@ -149,12 +166,12 @@ Alternativo:
 | UC01 Autenticar | Login via SSO (OIDC). Perfis mapeados por grupos do AD ou atribuídos no sistema | RNF03 |
 | UC03 Editar importação | Igual ao UC02, com controle de versão otimista. Alterações em processo calculado sinalizam "cálculo desatualizado" | RN17 |
 | UC04 Consultar | Lista com filtros, ordenação, paginação e indicadores de status | – |
-| UC05 Cancelar | Exige motivo. Remove da provisão | RN16 |
+| UC05 Cancelar | Exige motivo. Remove da provisão. Não cancela processo FECHADO | RN16, RN23 |
 | UC08 Histórico de cálculos | Lista versões com usuário, data, motivo e total. Comparação entre duas versões | RN13 |
 | UC09 Manter parâmetros | Novo valor cria nova vigência e encerra a anterior. Não há edição retroativa sem permissão especial | RN14 |
 | UC10 Manter alíquotas | Por imposto, tipo de importação e (opcional) NCM. Origem manual/TecWin | RN03 |
 | UC12 Cadastros de apoio | Transportadoras, despachantes e terminais com suas tabelas de valores e vigência | RN07–RN11 |
-| UC14 / UC15 Provisão por DI / tipo | Visões do UC13 agrupadas por processo ou tipo | RN20 |
+| UC14 / UC15 Provisão por IP / tipo | Visões do UC13 agrupadas por processo ou tipo | RN20 |
 | UC16 Exportar Excel | Exporta a visão atual com cabeçalho (filtros, data, usuário) e valores numéricos (não texto) | – |
 | UC17 Dashboard | Gráficos e KPIs sobre as versões vigentes | – |
 | UC19 Usuários e perfis | Ativar/inativar, atribuir perfis. Nunca excluir fisicamente | RNF04 |

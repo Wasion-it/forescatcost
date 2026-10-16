@@ -26,10 +26,10 @@
 
 | Entidade | Atributos principais | Observações |
 |----------|----------------------|-------------|
-| `tipo_importacao` | id, codigo (USO_CONSUMO, INDUSTRIALIZACAO), nome, ativo | Extensível |
+| `tipo_importacao` | id, codigo (USO_CONSUMO, INDUSTRIALIZACAO, ADICIONAR_ATIVO), nome, ativo | Extensível |
 | `moeda` | codigo (PK: BRL, USD, CNY, EUR), nome, simbolo | ISO 4217 |
 | `cotacao` | id, moeda_codigo, data, taxa, fonte (MANUAL, PTAX) | Base para sugerir taxas. O processo guarda a taxa efetivamente usada |
-| `transportadora` | id, nome, cnpj, tipo_servico (LOCAL, SECUNDARIO, INTERNACIONAL), ativo | |
+| `transportadora` | id, nome, cnpj, tipo_servico (LOCAL), ativo | Só transporte local. O transporte secundário foi removido |
 | `despachante` | id, nome, cnpj, ativo | |
 | `terminal` | id, nome (ex.: Chibatão), modal, ativo | Armazenagem |
 | `ncm` (opcional) | codigo (PK), descricao | Para alíquotas por NCM |
@@ -38,11 +38,11 @@
 
 | Entidade | Atributos principais | Observações |
 |----------|----------------------|-------------|
-| `parametro` | id, chave (ex.: `tcif.valor_item`), descricao, tipo_valor (MONETARIO, PERCENTUAL, INTEIRO, TEXTO), escopo (GLOBAL, TIPO_IMPORTACAO, TRANSPORTADORA, DESPACHANTE, TERMINAL) | Definição |
-| `parametro_valor` | id, parametro_id, escopo_ref_id (nullable), valor, vigencia_inicio, vigencia_fim, justificativa | Valor com vigência. Ex.: `despachante.honorario_di` = 715 para INDUSTRIALIZACAO |
-| `imposto` | id, codigo (II, IPI, PIS, COFINS, ICMS, AFRMM, CBS, IBS...), nome, ativo | "Outros impostos" sem código novo |
+| `parametro` | id, chave (ex.: `tcif.valor_item`), descricao, tipo_valor (MONETARIO, PERCENTUAL, INTEIRO, BOOLEANO, TEXTO), escopo (GLOBAL, TIPO_IMPORTACAO, TRANSPORTADORA, DESPACHANTE, TERMINAL) | Definição |
+| `parametro_valor` | id, parametro_id, escopo_ref_id (nullable), valor, vigencia_inicio, vigencia_fim, justificativa | Valor com vigência. Ex.: `despachante_honorario_ip` = 715 para INDUSTRIALIZACAO. BOOLEANO guarda 0 ou 1 (ex.: `ii_suspenso`) |
+| `imposto` | id, codigo (II, IPI, PIS, COFINS, ICMS, CBS, IBS...), nome, ativo | "Outros impostos" sem código novo |
 | `aliquota` | id, imposto_id, tipo_importacao_id, ncm_codigo (nullable), percentual, origem (MANUAL, TECWIN), vigencia_inicio, vigencia_fim, referencia_externa | |
-| `componente_custo` | id, codigo (CIF, II, TCIF, TRANSP_LOCAL...), nome, natureza (BASE, IMPOSTO, TAXA, SERVICO), compoe_provisao (bool), regra_competencia (MES_DI, CORTE_DIA, MES_PREVISTO), ordem_exibicao, ativo | RN20 |
+| `componente_custo` | id, codigo (CIF, II, TCIF, TRANSP_LOCAL...), nome, natureza (BASE, IMPOSTO, TAXA, SERVICO), compoe_provisao (bool), regra_competencia (MES_REFERENCIA, CORTE_DIA, MES_PREVISTO), ordem_exibicao, ativo | RN20 |
 | `formula` | id, componente_id, versao, expressao, aplica_tipo_importacao_id (nullable), aplica_modal (nullable), status (RASCUNHO, APROVADA, PUBLICADA, REVOGADA), vigencia_inicio, vigencia_fim, aprovado_por, aprovado_em | Versionada, com 4 olhos |
 | `caso_teste_formula` | id, componente_id, nome, entradas (JSONB), resultado_esperado | Golden cases |
 
@@ -50,13 +50,16 @@
 
 | Entidade | Atributos principais | Observações |
 |----------|----------------------|-------------|
-| `importacao` | id, numero_processo (UK, sequencial interno), tipo_declaracao (DI, DUIMP), numero_declaracao (UK parcial quando não nulo), data_declaracao, data_prevista, tipo_importacao_id, modal (MARITIMO, AEREO, RODOVIARIO), valor_invoice, moeda_invoice, valor_frete, moeda_frete, valor_seguro, moeda_seguro, qtd_itens, qtd_containers, taxa_usd, taxa_cny, valor_siscomex, peso_bruto_kg, peso_liquido_kg, transportadora_local_id, transportadora_secundaria_id, despachante_id, terminal_id, status, motivo_cancelamento, observacoes, versao | Taxas USD/CNY ficam explícitas conforme os requisitos. Para outras moedas usar `importacao_taxa_cambio` |
+| `importacao` | id, numero_processo (UK, sequencial interno), numero_ip (UK parcial quando não nulo; texto livre de até 30 caracteres), data_ip, data_prevista, tipo_importacao_id, modal (MARITIMO, AEREO, RODOVIARIO), valor_invoice, moeda_invoice, valor_frete, moeda_frete, valor_seguro, moeda_seguro, qtd_itens, qtd_containers, taxa_usd, taxa_cny, valor_siscomex, valor_taxa_liberacao, peso_bruto_kg, peso_liquido_kg, transportadora_local_id, despachante_id, terminal_id, status, motivo_cancelamento, valor_fatura, numero_fatura (até 60), fechado_em, fechado_por (FK usuario), observacoes, versao | A constraint `ck_importacao_fechamento` exige valor_fatura > 0 e numero_fatura preenchido quando o status é FECHADO. Taxas USD/CNY ficam explícitas conforme os requisitos. Para outras moedas usar `importacao_taxa_cambio` |
+| `importacao_despesa` | id, importacao_id, calculo_item_id (FK calculo_item), valor (>= 0), criado_em | Valor realizado de cada item do cálculo, informado no fechamento da despesa. Único por (importacao_id, calculo_item_id). `importacao.valor_fatura` é a soma dos itens. Auditada por trigger |
 | `importacao_taxa_cambio` | importacao_id, moeda_codigo, taxa | Generalização para moedas futuras (opcional no MVP) |
 | `importacao_aliquota_override` | id, importacao_id, imposto_id, percentual, justificativa | Exceções por processo |
 | `importacao_item` (fase 2) | id, importacao_id, ncm_codigo, descricao, quantidade, valor_moeda | Para alíquotas por NCM / adições |
 
-Status do processo: `RASCUNHO → CALCULADO → (PROVISIONADO*) → REALIZADO (fase 2)`, e `CANCELADO` a partir de qualquer status anterior a REALIZADO.
+Status do processo: `RASCUNHO → CALCULADO → FECHADO → (PROVISIONADO*) → REALIZADO (fase 2)`, e `CANCELADO` a partir de RASCUNHO ou CALCULADO (processo FECHADO não é cancelado nem recalculado).
 (*) PROVISIONADO = incluído em competência fechada.
+
+FECHADO é o fechamento da despesa de um processo (valor e número da fatura, RN23). É diferente do fechamento de competência mensal (tabela `competencia`, R1). O processo FECHADO continua na provisão viva. A auditoria do fechamento vem do trigger genérico da tabela `importacao`.
 
 ### 2.5 Cálculo e provisão
 
@@ -119,9 +122,8 @@ erDiagram
     IMPORTACAO {
         uuid id PK
         string numero_processo UK
-        string tipo_declaracao
-        string numero_declaracao
-        date data_declaracao
+        string numero_ip
+        date data_ip
         date data_prevista
         uuid tipo_importacao_id FK
         string modal
@@ -226,10 +228,10 @@ CREATE UNIQUE INDEX ux_calculo_vigente
   ON calculo (importacao_id)
   WHERE vigente AND tipo = 'OFICIAL';
 
--- Número de declaração único quando informado
-CREATE UNIQUE INDEX ux_importacao_declaracao
-  ON importacao (tipo_declaracao, numero_declaracao)
-  WHERE numero_declaracao IS NOT NULL;
+-- Número da IP único quando informado
+CREATE UNIQUE INDEX ux_importacao_ip
+  ON importacao (numero_ip)
+  WHERE numero_ip IS NOT NULL;
 
 -- Relatórios de provisão
 CREATE INDEX ix_calculo_item_competencia ON calculo_item (competencia, componente_id);

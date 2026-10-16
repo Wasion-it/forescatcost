@@ -26,7 +26,6 @@ ESCOPOS = {
     "GLOBAL",
     "TIPO_IMPORTACAO",
     "TRANSP_LOCAL",
-    "TRANSP_SECUNDARIA",
     "DESPACHANTE",
     "TERMINAL",
 }
@@ -41,7 +40,6 @@ def ref_do_escopo(imp: Importacao, escopo: str) -> uuid.UUID | None:
         "GLOBAL": None,
         "TIPO_IMPORTACAO": imp.tipo_importacao_id,
         "TRANSP_LOCAL": imp.transportadora_local_id,
-        "TRANSP_SECUNDARIA": imp.transportadora_secundaria_id,
         "DESPACHANTE": imp.despachante_id,
         "TERMINAL": imp.terminal_id,
     }[escopo]
@@ -143,6 +141,8 @@ def nova_vigencia_parametro(
         raise ErroNegocio("Parâmetro global não aceita valor por escopo")
     if parametro.tipo_valor == "PERCENTUAL" and not (0 <= valor < 1):
         raise ErroNegocio("Percentual deve estar entre 0 e 1 (ex.: 0,0092 para 0,92%)")
+    if parametro.tipo_valor == "BOOLEANO" and valor not in (Decimal(0), Decimal(1)):
+        raise ErroNegocio("Informe 1 (sim) ou 0 (não)")
     if valor < 0:
         raise ErroNegocio("O valor não pode ser negativo")
 

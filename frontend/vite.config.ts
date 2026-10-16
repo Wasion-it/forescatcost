@@ -6,7 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": { target: "http://localhost:8000", changeOrigin: false },
+      // 127.0.0.1 (e não localhost) evita cair em outro servidor que escute em IPv6 (::1).
+      "/api": { target: "http://127.0.0.1:8010", changeOrigin: false },
     },
   },
   test: {

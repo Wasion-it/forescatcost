@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -13,14 +12,10 @@ Dinheiro = Annotated[Decimal, Field(ge=0, max_digits=16, decimal_places=2)]
 TaxaCambio = Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=6)]
 Peso = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=3)]
 
-_RE_DI = re.compile(r"^\d{2}/\d{7}-\d$")
-_RE_DUIMP = re.compile(r"^\d{2}BR\d{10}-?\d$")
-
 
 class ImportacaoEntrada(BaseModel):
-    tipo_declaracao: Literal["DI", "DUIMP"] = "DI"
-    numero_declaracao: str | None = Field(default=None, max_length=30)
-    data_declaracao: date | None = None
+    numero_ip: str | None = Field(default=None, max_length=30)
+    data_ip: date | None = None
     data_prevista: date | None = None
     tipo_importacao_id: UUID
     modal: Literal["MARITIMO", "AEREO"]
@@ -33,16 +28,16 @@ class ImportacaoEntrada(BaseModel):
     taxa_usd: TaxaCambio | None = None
     taxa_cny: TaxaCambio | None = None
     valor_siscomex: Dinheiro = Decimal(0)
+    valor_taxa_liberacao: Dinheiro = Decimal(0)
     peso_bruto_kg: Peso = Decimal(0)
     peso_liquido_kg: Peso = Decimal(0)
     valor_armazenagem_aerea: Dinheiro = Decimal(0)
     transportadora_local_id: UUID | None = None
-    transportadora_secundaria_id: UUID | None = None
     despachante_id: UUID | None = None
     terminal_id: UUID | None = None
     observacoes: str | None = Field(default=None, max_length=2000)
 
-    @field_validator("numero_declaracao", "observacoes", mode="before")
+    @field_validator("numero_ip", "observacoes", mode="before")
     @classmethod
     def _vazio_para_nulo(cls, v):
         if isinstance(v, str):
@@ -53,13 +48,8 @@ class ImportacaoEntrada(BaseModel):
     @model_validator(mode="after")
     def _regras(self) -> ImportacaoEntrada:
         erros: list[str] = []
-        if self.data_declaracao is None and self.data_prevista is None:
-            erros.append("Informe a data da declaração ou a data prevista")
-        if self.numero_declaracao:
-            padrao = _RE_DI if self.tipo_declaracao == "DI" else _RE_DUIMP
-            if not padrao.match(self.numero_declaracao):
-                exemplo = "26/1234567-8" if self.tipo_declaracao == "DI" else "26BR0000012345-6"
-                erros.append(f"Número da {self.tipo_declaracao} fora do padrão (ex.: {exemplo})")
+        if self.data_ip is None and self.data_prevista is None:
+            erros.append("Informe a data da IP ou a data prevista")
         moedas = {self.moeda_invoice, self.moeda_frete}
         if "USD" in moedas and self.taxa_usd is None:
             erros.append("Informe a taxa USD")
@@ -74,6 +64,44 @@ class ImportacaoEntrada(BaseModel):
 
 class ImportacaoAtualizacao(ImportacaoEntrada):
     versao: int
+
+
+class DespesaFechamento(BaseModel):
+    """Valor realizado de um item do cálculo (identificado pelo código do componente)."""
+
+    componente_codigo: str = Field(min_length=1, max_length=30)
+    valor: Dinheiro
+
+
+class FechamentoDespesa(BaseModel):
+    versao: int
+    numero_fatura: str = Field(min_length=1, max_length=60)
+    despesas: list[DespesaFechamento] = Field(min_length=1)
+
+    @field_validator("numero_fatura", mode="before")
+    @classmethod
+    def _apara_numero(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("Informe o número da fatura")
+        return v
+
+    @model_validator(mode="after")
+    def _sem_repetidos(self) -> FechamentoDespesa:
+        codigos = [d.componente_codigo for d in self.despesas]
+        if len(codigos) != len(set(codigos)):
+            raise ValueError("Cada item da despesa deve ser informado uma única vez")
+        return self
+
+
+class DespesaFechada(BaseModel):
+    componente_codigo: str
+    componente_nome: str
+    natureza: str
+    ordem: int
+    provisionado: Decimal
+    valor: Decimal
 
 
 class Cancelamento(BaseModel):
@@ -152,10 +180,9 @@ class RegistroCalculo(BaseModel):
 class ImportacaoResumo(BaseModel):
     id: UUID
     numero_processo: str
-    tipo_declaracao: str
-    numero_declaracao: str | None
+    numero_ip: str | None
     data_referencia: date | None
-    data_declaracao: date | None
+    data_ip: date | None
     tipo_importacao: TipoRef
     modal: str
     status: str
@@ -171,15 +198,19 @@ class ImportacaoDetalhe(ImportacaoEntrada):
     status: str
     calculo_desatualizado: bool
     motivo_cancelamento: str | None
+    valor_fatura: Decimal | None = None
+    numero_fatura: str | None = None
+    fechado_em: datetime | None = None
+    fechado_por_nome: str | None = None
     versao: int
     criado_em: datetime
     atualizado_em: datetime
     tipo_importacao: TipoRef
     transportadora_local: RefNome | None
-    transportadora_secundaria: RefNome | None
     despachante: RefNome | None
     terminal: RefNome | None
     calculo_vigente: CalculoSaida | None = None
+    despesas_fechadas: list[DespesaFechada] = []
 
     # A saída não revalida as regras de entrada (dados já persistidos)
     @model_validator(mode="after")

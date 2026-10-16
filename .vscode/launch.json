@@ -7,7 +7,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["app.main:app", "--reload", "--port", "8000"],
+      "args": ["app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8010"],
       "cwd": "${workspaceFolder}/backend",
       "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
       "envFile": "${workspaceFolder}/backend/.env",

@@ -10,7 +10,7 @@ import type { Importacao, ImportacaoEntrada } from "../../lib/tipos";
 
 // Campos numéricos são editados como texto pt-BR e convertidos no envio
 const DECIMAIS = [
-  "valor_invoice", "valor_frete", "taxa_usd", "taxa_cny", "valor_siscomex",
+  "valor_invoice", "valor_frete", "valor_taxa_liberacao", "taxa_usd", "taxa_cny", "valor_siscomex",
   "peso_bruto_kg", "peso_liquido_kg", "valor_armazenagem_aerea",
 ] as const;
 type CampoDecimal = (typeof DECIMAIS)[number];
@@ -18,14 +18,13 @@ type Formulario = Omit<ImportacaoEntrada, CampoDecimal | "qtd_itens" | "qtd_cont
   Record<CampoDecimal, string> & { qtd_itens: string; qtd_containers: string };
 
 const CASAS: Record<CampoDecimal, number> = {
-  valor_invoice: 2, valor_frete: 2, valor_siscomex: 2, valor_armazenagem_aerea: 2,
+  valor_invoice: 2, valor_frete: 2, valor_taxa_liberacao: 2, valor_siscomex: 2, valor_armazenagem_aerea: 2,
   taxa_usd: 4, taxa_cny: 4, peso_bruto_kg: 0, peso_liquido_kg: 0,
 };
 
 const VAZIO: Formulario = {
-  tipo_declaracao: "DI",
-  numero_declaracao: "",
-  data_declaracao: "",
+  numero_ip: "",
+  data_ip: "",
   data_prevista: "",
   tipo_importacao_id: "",
   modal: "MARITIMO",
@@ -38,11 +37,11 @@ const VAZIO: Formulario = {
   taxa_usd: "",
   taxa_cny: "",
   valor_siscomex: "",
+  valor_taxa_liberacao: "",
   peso_bruto_kg: "",
   peso_liquido_kg: "",
   valor_armazenagem_aerea: "",
   transportadora_local_id: "",
-  transportadora_secundaria_id: "",
   despachante_id: "",
   terminal_id: "",
   observacoes: "",
@@ -74,14 +73,14 @@ function paraEnvio(f: Formulario): { corpo: ImportacaoEntrada | null; erros: Rec
     if (f[k] === "" || !/^\d+$/.test(f[k])) erros[k] = "Informe um número inteiro";
     else corpo[k] = Number(f[k]);
   }
-  for (const k of ["valor_siscomex", "peso_bruto_kg", "peso_liquido_kg", "valor_armazenagem_aerea"] as const) {
+  for (const k of ["valor_siscomex", "valor_taxa_liberacao", "peso_bruto_kg", "peso_liquido_kg", "valor_armazenagem_aerea"] as const) {
     corpo[k] = corpo[k] ?? "0";
   }
   for (const k of ["valor_invoice", "valor_frete"] as const) if (corpo[k] === null) erros[k] = "Obrigatório";
   if (!f.tipo_importacao_id) erros.tipo_importacao_id = "Selecione o tipo";
   for (const k of [
-    "numero_declaracao", "data_declaracao", "data_prevista", "transportadora_local_id",
-    "transportadora_secundaria_id", "despachante_id", "terminal_id", "observacoes",
+    "numero_ip", "data_ip", "data_prevista", "transportadora_local_id",
+    "despachante_id", "terminal_id", "observacoes",
   ] as const) {
     if (corpo[k] === "") corpo[k] = null;
   }
@@ -127,8 +126,7 @@ export function FormularioImportacao() {
   const errosServidor = salvar.error instanceof ErroApi ? salvar.error.campos : {};
   const erros = { ...errosServidor, ...errosLocais };
 
-  const transportLocais = transportadoras.data?.filter((t) => t.tipo_servico !== "SECUNDARIO") ?? [];
-  const transportSec = transportadoras.data?.filter((t) => t.tipo_servico !== "LOCAL") ?? [];
+  const transportLocais = transportadoras.data ?? [];
   const terminaisModal = terminais.data?.filter((t) => t.modal === f.modal) ?? [];
 
   const previa = useMemo(() => {
@@ -150,7 +148,8 @@ export function FormularioImportacao() {
     };
     const invoice = num(f.valor_invoice) * taxa(f.moeda_invoice);
     const frete = num(f.valor_frete) * taxa(f.moeda_frete);
-    const cif = invoice + frete + num(f.valor_siscomex);
+    // CIF = valor aduaneiro (invoice + frete). A Taxa Siscomex fica fora e entra só no ICMS.
+    const cif = invoice + frete;
     return { invoice, frete, cif };
   }, [f]);
 
@@ -172,6 +171,7 @@ export function FormularioImportacao() {
   if (existente.error) return <AvisoErro erro={existente.error} />;
 
   const titulo = editando ? `Editar ${existente.data?.numero_processo}` : "Nova importação";
+  const fechado = existente.data?.status === "FECHADO";
   const usaUSD = f.moeda_invoice === "USD" || f.moeda_frete === "USD";
   const usaCNY = f.moeda_invoice === "CNY" || f.moeda_frete === "CNY";
 
@@ -235,31 +235,30 @@ export function FormularioImportacao() {
         descricao="Os valores em moeda estrangeira são convertidos com as taxas informadas neste processo."
       />
 
+      {fechado && (
+        <div className="aviso aviso-atencao" style={{ marginBottom: "var(--e-5)" }}>
+          <p>A despesa deste processo está fechada. Ele não pode mais ser editado.</p>
+        </div>
+      )}
       {existente.data?.status === "CALCULADO" && (
         <div className="aviso aviso-atencao" style={{ marginBottom: "var(--e-5)" }}>
           <p>Este processo já foi calculado. Depois de salvar, recalcule para atualizar a provisão.</p>
         </div>
       )}
 
-      <section className="painel" aria-labelledby="sec-declaracao">
+      <section className="painel" aria-labelledby="sec-ip">
         <div className="painel-topo">
-          <h2 id="sec-declaracao">Declaração</h2>
+          <h2 id="sec-ip">IP</h2>
         </div>
         <div className="painel-corpo grade-campos">
-          <Campo id="tipo_declaracao" rotulo="Tipo de declaração">
-            <select id="tipo_declaracao" className="entrada" value={f.tipo_declaracao} onChange={(e) => atualizar("tipo_declaracao", e.target.value as "DI" | "DUIMP")}>
-              <option value="DI">DI</option>
-              <option value="DUIMP">DUIMP</option>
-            </select>
-          </Campo>
           {campoTexto(
-            "numero_declaracao",
-            `Número da ${f.tipo_declaracao}`,
-            { placeholder: f.tipo_declaracao === "DI" ? "26/1234567-8" : "26BR0000012345-6" },
-            "Deixe em branco se ainda não foi registrada",
+            "numero_ip",
+            "Número da IP",
+            { placeholder: "IP-26-0001", maxLength: 30 },
+            "Identificador da provisão. Deixe em branco se ainda não foi gerado",
           )}
-          {campoTexto("data_declaracao", "Data de registro", { type: "date" })}
-          {campoTexto("data_prevista", "Data prevista", { type: "date" }, "Usada para a competência enquanto não houver registro")}
+          {campoTexto("data_ip", "Data da IP", { type: "date" })}
+          {campoTexto("data_prevista", "Data prevista", { type: "date" }, "Usada para a competência enquanto não houver data da IP")}
           {seletor("tipo_importacao_id", "Tipo de importação", tipos.data ?? [], "Selecione")}
           <Campo id="modal" rotulo="Modal">
             <select
@@ -299,9 +298,14 @@ export function FormularioImportacao() {
               <option value="BRL">BRL</option>
             </select>
           </Campo>
+          {campoNumero("valor_taxa_liberacao", "Taxa de liberação (R$)", "Varia a cada processo. Informe o valor cobrado.")}
           {campoNumero("taxa_usd", usaUSD ? "Taxa USD" : "Taxa USD (opcional)")}
           {campoNumero("taxa_cny", usaCNY ? "Taxa CNY" : "Taxa CNY (opcional)")}
-          {campoNumero("valor_siscomex", "Taxa Siscomex (R$)")}
+          {campoNumero(
+            "valor_siscomex",
+            "Taxa Siscomex (R$)",
+            "Deixe em branco para o sistema estimar pelo nº de itens (tabela oficial). Informe só se já souber o valor real.",
+          )}
           {f.modal === "AEREO" &&
             campoNumero("valor_armazenagem_aerea", "Armazenagem aérea (R$)", "Informada manualmente até a regra ser definida")}
           <div className="largo previa-cif" aria-live="polite">
@@ -328,7 +332,6 @@ export function FormularioImportacao() {
           {campoNumero("peso_bruto_kg", "Peso bruto (kg)")}
           {campoNumero("peso_liquido_kg", "Peso líquido (kg)")}
           {seletor("transportadora_local_id", "Transportadora local", transportLocais, "Usar valores padrão")}
-          {seletor("transportadora_secundaria_id", "Transportadora secundária", transportSec, "Usar valores padrão")}
           {seletor("despachante_id", "Despachante", despachantes.data ?? [])}
           {seletor("terminal_id", "Terminal de armazenagem", terminaisModal, "Usar valores padrão")}
           <div className="campo largo">
@@ -351,11 +354,11 @@ export function FormularioImportacao() {
         <Link to={editando ? `/importacoes/${id}` : "/importacoes"} className="botao botao-texto">
           Cancelar
         </Link>
-        <button type="submit" className="botao" disabled={salvar.isPending}>
+        <button type="submit" className="botao" disabled={salvar.isPending || fechado}>
           {editando ? "Salvar alterações" : "Salvar rascunho"}
         </button>
         {pode(PERM.calcular) && (
-          <button type="button" className="botao botao-primario" disabled={salvar.isPending} onClick={enviar(true)}>
+          <button type="button" className="botao botao-primario" disabled={salvar.isPending || fechado} onClick={enviar(true)}>
             {salvar.isPending ? "Salvando…" : "Salvar e calcular"}
           </button>
         )}

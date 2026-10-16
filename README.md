@@ -22,12 +22,12 @@ uv sync
 Copy-Item .env.example .env          # ajuste se necessário
 uv run alembic upgrade head
 uv run python -m app.seed --exemplos # dados base + 9 processos de exemplo
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 
 # 3. Frontend (outro terminal)
 cd frontend
 npm install
-npm run dev                          # http://localhost:5173 (proxy /api → :8000)
+npm run dev                          # http://localhost:5173 (proxy /api → :8010)
 ```
 
 Usuários criados pelo seed (senha definida em `SEED_SENHA`, padrão `Forecast@2026!`):
@@ -38,7 +38,7 @@ Usuários criados pelo seed (senha definida em `SEED_SENHA`, padrão `Forecast@2
 | financeiro@forecast.local | Financeiro: consulta provisões e exporta |
 | admin@forecast.local | Administrador: usuários, parâmetros, auditoria |
 
-A documentação da API fica em http://localhost:8000/api/docs (desativada quando `AMBIENTE=prd`).
+A documentação da API fica em http://127.0.0.1:8010/api/docs (desativada quando `AMBIENTE=prd`).
 
 ## Testes e qualidade
 
@@ -54,7 +54,8 @@ npm run build            # typecheck + build
 
 ## O que o MVP entrega
 
-- Cadastro, edição (com controle de concorrência), consulta e cancelamento de processos (DI ou DUIMP, ou só data prevista).
+- Cadastro, edição (com controle de concorrência), consulta e cancelamento de processos (com número e data da IP, ou só data prevista).
+- Fechamento da despesa por processo: o PCM informa valor e número da fatura (`POST /api/v1/importacoes/{id}/fechar`) e o processo passa a FECHADO (sem edição, recálculo ou cancelamento, e segue na provisão). Não é o fechamento de competência mensal, que continua pendente (R1).
 - Motor de cálculo puro com fórmulas versionadas em banco e avaliador seguro (sem `eval`), aritmética `Decimal` e regra de competência do dia 15.
 - Cada cálculo é uma versão imutável, com memória por componente, snapshot de entradas e parâmetros e hash de integridade. O recálculo exige motivo.
 - Parâmetros e alíquotas com vigência (sem sobreposição, garantida por constraint no PostgreSQL) e valores por escopo (tipo de importação, transportadora, terminal).
