@@ -1,0 +1,43 @@
+name: Validar pacote de distribuição
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Nome do ambiente
+        required: true
+        type: string
+    outputs:
+      deploy_result:
+        description: Resultado da validação
+        value: ${{ jobs.deploy.result }}
+
+jobs:
+  deploy:
+    name: Validar fonte de entrega
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Verificar conteúdo da entrega
+        shell: bash
+        run: |
+          test -f README.md
+          test -f backend/pyproject.toml
+          test -f backend/uv.lock
+          test -f backend/Dockerfile
+          test -f frontend/package.json
+          test -f frontend/Dockerfile
+          test -f docker-compose.yml
+
+      - name: Resumo da validação de deploy
+        shell: bash
+        run: |
+          {
+            echo '## Validação de deploy concluída'
+            echo ''
+            echo "- Ambiente: ${{ inputs.environment }}"
+            echo '- Fonte e artefatos esperados: validados'
+          } >> "$GITHUB_STEP_SUMMARY"
