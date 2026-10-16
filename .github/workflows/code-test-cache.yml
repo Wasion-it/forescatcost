@@ -1,0 +1,48 @@
+name: Validação agendada com cache
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    name: Preparar ambiente
+    uses: ./.github/workflows/includes-environment.yml
+    with:
+      environment: cache
+
+  test:
+    name: Validar projeto
+    needs: setup
+    uses: ./.github/workflows/includes-test.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  build:
+    name: Empacotar aplicação
+    needs: [setup, test]
+    uses: ./.github/workflows/includes-build.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  report:
+    name: Resumo final
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [setup, test, build]
+    steps:
+      - name: Gerar resumo
+        run: |
+          {
+            echo '## Validação agendada concluída'
+            echo ''
+            echo "- Projeto: ${{ needs.setup.outputs.project }}"
+            echo "- Ambiente: ${{ needs.setup.outputs.environment }}"
+            echo "- Testes: ${{ needs.test.result }}"
+            echo "- Build: ${{ needs.build.result }}"
+          } >> "$GITHUB_STEP_SUMMARY"

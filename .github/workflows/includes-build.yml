@@ -1,0 +1,57 @@
+name: Empacotar aplicação
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Nome do ambiente
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Validar empacotamento lógico
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Configurar uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Validar lock e imports do backend
+        working-directory: backend
+        run: |
+          uv sync --frozen --no-dev
+          uv run python -m compileall app
+          uv run python -c "from app.main import app; print(app.title)"
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build do frontend
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Resumo
+        if: ${{ always() }}
+        run: |
+          {
+            echo '## Build lógico'
+            echo ''
+            echo '- Backend: lockfile e imports validados'
+            echo '- Frontend: Node 22 + bundle de produção validado'
+            echo '- Ambiente: ${{ inputs.environment }}'
+          } >> "$GITHUB_STEP_SUMMARY"
