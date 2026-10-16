@@ -1,0 +1,213 @@
+name: Deploy imutável no servidor
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Nome do ambiente
+        required: true
+        type: string
+      deploy_host:
+        description: Host do servidor de deploy
+        required: true
+        type: string
+      deploy_user:
+        description: Usuário do servidor de deploy
+        required: true
+        type: string
+      deploy_path:
+        description: Diretório de deploy no servidor
+        required: true
+        type: string
+      image_tag:
+        description: Tag imutável já publicada no Registry Wasion
+        required: true
+        type: string
+      frontend_port:
+        description: Porta publicada do frontend
+        required: false
+        type: string
+        default: '18080'
+      cors_origins:
+        description: JSON de origens CORS permitidas
+        required: false
+        type: string
+        default: '[]'
+    secrets:
+      DEPLOY_PROD_SSH_KEY:
+        required: true
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_PASSWORD:
+        required: true
+
+jobs:
+  deploy:
+    name: Publicar Forecast no Docker Swarm
+    runs-on: self-hosted
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Validar tag imutável
+        shell: bash
+        run: |
+          if ! echo '${{ inputs.image_tag }}' | grep -Eq '^sha-[0-9a-f]{40}$'; then
+            echo 'A tag deve usar o formato sha-<commit completo de 40 caracteres>.' >&2
+            exit 1
+          fi
+
+      - name: Preparar manifesto de produção
+        shell: bash
+        run: |
+          mkdir -p deploy-package
+          cp docker-compose.prod.yml deploy-package/docker-compose.prod.yml
+
+      - name: Preparar destino no servidor
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ inputs.deploy_host }}
+          username: ${{ inputs.deploy_user }}
+          key: ${{ secrets.DEPLOY_PROD_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            mkdir -p "${{ inputs.deploy_path }}"
+
+      - name: Enviar manifesto de deploy
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ inputs.deploy_host }}
+          username: ${{ inputs.deploy_user }}
+          key: ${{ secrets.DEPLOY_PROD_SSH_KEY }}
+          source: deploy-package/docker-compose.prod.yml
+          target: ${{ inputs.deploy_path }}
+          strip_components: 1
+
+      - name: Publicar aplicação no servidor
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          FORECAST_CORS_ORIGINS: ${{ inputs.cors_origins }}
+          FORECAST_FRONTEND_PORT: ${{ inputs.frontend_port }}
+        with:
+          host: ${{ inputs.deploy_host }}
+          username: ${{ inputs.deploy_user }}
+          key: ${{ secrets.DEPLOY_PROD_SSH_KEY }}
+          script_stop: true
+          envs: REGISTRY_USERNAME,REGISTRY_PASSWORD,FORECAST_CORS_ORIGINS,FORECAST_FRONTEND_PORT
+          script: |
+            set -e
+
+            STACK_NAME="forecast"
+            IMAGE_TAG="${{ inputs.image_tag }}"
+            APP_COMMIT="${IMAGE_TAG#sha-}"
+
+            export BACKEND_IMAGE="registry.wasion.com.br/wasion/forecast-backend:${IMAGE_TAG}"
+            export FRONTEND_IMAGE="registry.wasion.com.br/wasion/forecast-frontend:${IMAGE_TAG}"
+            export APP_VERSION="${IMAGE_TAG}"
+            export APP_COMMIT
+            export APP_ENVIRONMENT="production"
+            export FORECAST_CORS_ORIGINS
+            export FORECAST_FRONTEND_PORT
+
+            cd "${{ inputs.deploy_path }}"
+
+            if ! docker info --format '{{.Swarm.LocalNodeState}} {{.Swarm.ControlAvailable}}' | grep -Eq '^active true$'; then
+              echo 'ERRO: o servidor não está ativo como manager do Docker Swarm.'
+              exit 1
+            fi
+
+            echo 'Validando Docker Swarm Secrets obrigatórias...'
+            for secret in forecast_database_url forecast_jwt_secret; do
+              if ! docker secret inspect "$secret" >/dev/null 2>&1; then
+                echo "ERRO: Docker Swarm Secret ausente: $secret"
+                exit 1
+              fi
+            done
+
+            echo "$REGISTRY_PASSWORD" | docker login registry.wasion.com.br \
+              -u "$REGISTRY_USERNAME" --password-stdin
+
+            echo 'Baixando imagens imutáveis...'
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+
+            echo 'Validando manifesto de produção...'
+            docker stack config -c docker-compose.prod.yml >/dev/null
+
+            echo 'Publicando stack...'
+            docker stack deploy \
+              --with-registry-auth \
+              --prune \
+              -c docker-compose.prod.yml \
+              "$STACK_NAME"
+
+            echo 'Aguardando backend convergir...'
+            for i in $(seq 1 24); do
+              sleep 5
+              STATE=$(docker service ps "${STACK_NAME}_backend" \
+                --filter 'desired-state=running' \
+                --format '{{.CurrentState}}' | head -1)
+              echo "  [${i}/24] backend: ${STATE}"
+              if echo "$STATE" | grep -q '^Running'; then
+                break
+              fi
+              if [ "$i" -eq 24 ]; then
+                docker service logs "${STACK_NAME}_backend" --tail 80 || true
+                exit 1
+              fi
+            done
+
+            echo 'Aguardando frontend convergir...'
+            for i in $(seq 1 24); do
+              sleep 5
+              STATE=$(docker service ps "${STACK_NAME}_frontend" \
+                --filter 'desired-state=running' \
+                --format '{{.CurrentState}}' | head -1)
+              echo "  [${i}/24] frontend: ${STATE}"
+              if echo "$STATE" | grep -q '^Running'; then
+                break
+              fi
+              if [ "$i" -eq 24 ]; then
+                docker service logs "${STACK_NAME}_frontend" --tail 80 || true
+                exit 1
+              fi
+            done
+
+            echo 'Validando frontend pela porta publicada...'
+            for i in $(seq 1 12); do
+              if curl -fsS "http://127.0.0.1:${FORECAST_FRONTEND_PORT}/" >/dev/null; then
+                echo 'Frontend respondeu com sucesso.'
+                break
+              fi
+              if [ "$i" -eq 12 ]; then
+                echo 'ERRO: frontend não respondeu na porta publicada.'
+                exit 1
+              fi
+              sleep 5
+            done
+
+            docker stack services "$STACK_NAME"
+            docker service inspect "${STACK_NAME}_backend" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+            docker service inspect "${STACK_NAME}_frontend" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+            docker logout registry.wasion.com.br || true
+
+      - name: Resumo do deploy
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo '## Deploy imutável do Forecast'
+            echo ''
+            echo "- Ambiente: ${{ inputs.environment }}"
+            echo "- Servidor: ${{ inputs.deploy_host }}"
+            echo '- Stack: forecast'
+            echo "- Tag: ${{ inputs.image_tag }}"
+            echo "- Porta frontend: ${{ inputs.frontend_port }}"
+            echo '- Segredos da aplicação: Docker Swarm Secrets'
+          } >> "$GITHUB_STEP_SUMMARY"
