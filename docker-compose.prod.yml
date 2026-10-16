@@ -52,7 +52,7 @@ services:
       - target: 8080
         published: ${FORECAST_FRONTEND_PORT:-18080}
         protocol: tcp
-        mode: host
+        mode: ingress
     deploy:
       replicas: 1
       restart_policy:
