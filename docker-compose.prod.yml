@@ -1,0 +1,86 @@
+version: "3.8"
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE obrigatoria}
+    environment:
+      AMBIENTE: prd
+      APP_VERSION: ${APP_VERSION:-unknown}
+      APP_COMMIT: ${APP_COMMIT:-unknown}
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      CORS_ORIGENS: ${FORECAST_CORS_ORIGENS:-[]}
+    secrets:
+      - forecast_database_url
+      - forecast_jwt_secret
+    command:
+      - /bin/sh
+      - -ec
+      - |
+          export DATABASE_URL="$$(cat /run/secrets/forecast_database_url)"
+          export JWT_SEGREDO="$$(cat /run/secrets/forecast_jwt_secret)"
+          echo 'Aplicando migrations...'
+          alembic upgrade head
+          exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - forecast_internal
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      labels:
+        - "portainer.stack=forecast"
+        - "portainer.service=backend"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE obrigatoria}
+    networks:
+      - forecast_internal
+    ports:
+      - target: 8080
+        published: ${FORECAST_FRONTEND_PORT:-18080}
+        protocol: tcp
+        mode: host
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      labels:
+        - "portainer.stack=forecast"
+        - "portainer.service=frontend"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+networks:
+  forecast_internal:
+    driver: overlay
+    attachable: true
+
+secrets:
+  forecast_database_url:
+    external: true
+  forecast_jwt_secret:
+    external: true
