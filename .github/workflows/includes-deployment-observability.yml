@@ -1,0 +1,165 @@
+name: Registrar observabilidade de deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Ambiente publicado
+        required: true
+        type: string
+      grafana_url:
+        description: URL base do Grafana
+        required: true
+        type: string
+      runner_label:
+        description: Runner com acesso ao Grafana
+        required: false
+        type: string
+        default: self-hosted
+      image_tag:
+        description: Tag imutável publicada
+        required: true
+        type: string
+      actor:
+        description: Usuário que disparou o deploy
+        required: true
+        type: string
+      run_id:
+        description: ID da execução do GitHub Actions
+        required: true
+        type: string
+      run_number:
+        description: Número da execução do GitHub Actions
+        required: true
+        type: string
+      run_url:
+        description: URL da execução do GitHub Actions
+        required: true
+        type: string
+    secrets:
+      GRAFANA_ANNOTATION_TOKEN:
+        required: true
+    outputs:
+      annotation_result:
+        description: Resultado do registro da annotation
+        value: ${{ jobs.annotation.outputs.annotation_result }}
+      annotation_id:
+        description: ID da annotation criada no Grafana
+        value: ${{ jobs.annotation.outputs.annotation_id }}
+
+jobs:
+  annotation:
+    name: Registrar deploy no Grafana
+    runs-on: ${{ inputs.runner_label }}
+    outputs:
+      annotation_result: ${{ steps.status.outputs.result }}
+      annotation_id: ${{ steps.status.outputs.annotation_id }}
+
+    steps:
+      - name: Criar annotation de deploy
+        id: annotation
+        continue-on-error: true
+        shell: bash
+        env:
+          GRAFANA_URL: ${{ inputs.grafana_url }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_ANNOTATION_TOKEN }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_VERSION: ${{ inputs.image_tag }}
+          DEPLOY_ACTOR: ${{ inputs.actor }}
+          DEPLOY_RUN_ID: ${{ inputs.run_id }}
+          DEPLOY_RUN_NUMBER: ${{ inputs.run_number }}
+          DEPLOY_RUN_URL: ${{ inputs.run_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$GRAFANA_URL" ]; then
+            echo 'GRAFANA_URL não configurada.'
+            exit 1
+          fi
+
+          DEPLOY_COMMIT="${DEPLOY_VERSION#sha-}"
+          export DEPLOY_COMMIT
+          EVENT_TIME_MS="$(date +%s%3N)"
+          export EVENT_TIME_MS
+
+          PAYLOAD="$(python3 - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "time": int(os.environ["EVENT_TIME_MS"]),
+              "tags": ["deploy", "forecast", os.environ["DEPLOY_ENVIRONMENT"]],
+              "text": (
+                  "Deploy Forecast"
+                  f" | version: {os.environ['DEPLOY_VERSION']}"
+                  f" | commit: {os.environ['DEPLOY_COMMIT']}"
+                  f" | actor: {os.environ['DEPLOY_ACTOR']}"
+                  f" | run: #{os.environ['DEPLOY_RUN_NUMBER']}"
+                  f" | {os.environ['DEPLOY_RUN_URL']}"
+              ),
+          }
+          print(json.dumps(payload, ensure_ascii=False))
+          PY
+          )"
+
+          RESPONSE_FILE="$(mktemp)"
+          trap 'rm -f "$RESPONSE_FILE"' EXIT
+
+          set +e
+          HTTP_CODE="$(curl \
+            --silent \
+            --show-error \
+            --output "$RESPONSE_FILE" \
+            --write-out '%{http_code}' \
+            --request POST \
+            "$GRAFANA_URL/api/annotations" \
+            --header "Authorization: Bearer $GRAFANA_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$PAYLOAD")"
+          CURL_EXIT=$?
+          set -e
+
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "Falha de conexão com o Grafana. curl exit code: $CURL_EXIT"
+            exit 1
+          fi
+
+          if ! echo "$HTTP_CODE" | grep -Eq '^2[0-9][0-9]$'; then
+            echo "Grafana retornou HTTP $HTTP_CODE"
+            cat "$RESPONSE_FILE"
+            exit 1
+          fi
+
+          ANNOTATION_ID="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("id", ""))' < "$RESPONSE_FILE")"
+          echo "annotation_id=$ANNOTATION_ID" >> "$GITHUB_OUTPUT"
+          echo "Annotation criada no Grafana com ID: $ANNOTATION_ID"
+
+      - name: Consolidar resultado da observabilidade
+        id: status
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [ "${{ steps.annotation.outcome }}" = "success" ]; then
+            echo 'result=success' >> "$GITHUB_OUTPUT"
+            echo "annotation_id=${{ steps.annotation.outputs.annotation_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo 'result=failure' >> "$GITHUB_OUTPUT"
+            echo 'annotation_id=' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resumo da annotation
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo '## Observabilidade do deploy'
+            echo ''
+            echo "- Ambiente: ${{ inputs.environment }}"
+            echo "- Versão: ${{ inputs.image_tag }}"
+            echo "- Executado por: ${{ inputs.actor }}"
+            echo "- GitHub Run: #${{ inputs.run_number }}"
+            echo "- Resultado: ${{ steps.status.outputs.result }}"
+            if [ -n "${{ steps.status.outputs.annotation_id }}" ]; then
+              echo "- Annotation ID: ${{ steps.status.outputs.annotation_id }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_expiracao_minutos: int = 480
     cors_origens: list[str] = ["http://localhost:5173"]
 
+    # Metadados injetados pelo pipeline para rastreabilidade do deploy.
+    app_version: str = "0.1.0-dev"
+    app_commit: str = "unknown"
+    app_environment: str = "dev"
+
     def validar_producao(self) -> None:
         if not self.jwt_segredo:
             self.jwt_segredo = _SEGREDO_DEV
