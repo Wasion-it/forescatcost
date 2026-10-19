@@ -1,6 +1,53 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: forecast
+      POSTGRES_USER: forecast
+      POSTGRES_PASSWORD_FILE: /run/secrets/forecast_postgres_password
+    secrets:
+      - forecast_postgres_password
+    volumes:
+      - forecast_pgdata:/var/lib/postgresql/data
+    networks:
+      - forecast_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forecast -d forecast"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      labels:
+        - "portainer.stack=forecast"
+        - "portainer.service=postgres"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE obrigatoria}
     environment:
@@ -8,18 +55,27 @@ services:
       APP_VERSION: ${APP_VERSION:-unknown}
       APP_COMMIT: ${APP_COMMIT:-unknown}
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
-      CORS_ORIGENS: ${FORECAST_CORS_ORIGENS:-[]}
+      CORS_ORIGENS: ${FORECAST_CORS_ORIGINS:-[]}
     secrets:
-      - forecast_database_url
+      - forecast_postgres_password
       - forecast_jwt_secret
     command:
       - /bin/sh
       - -ec
       - |
-          export DATABASE_URL="$$(cat /run/secrets/forecast_database_url)"
+          export DATABASE_URL="postgresql+psycopg://forecast:$$(cat /run/secrets/forecast_postgres_password)@postgres:5432/forecast"
           export JWT_SEGREDO="$$(cat /run/secrets/forecast_jwt_secret)"
           echo 'Aplicando migrations...'
-          alembic upgrade head
+          tentativa=1
+          until alembic upgrade head; do
+            if [ "$$tentativa" -ge 30 ]; then
+              echo 'ERRO: nao foi possivel aplicar as migrations apos 30 tentativas.' >&2
+              exit 1
+            fi
+            echo "Banco ainda indisponivel; nova tentativa em 2s ($$tentativa/30)..."
+            tentativa=$$((tentativa + 1))
+            sleep 2
+          done
           exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     networks:
       - forecast_internal
@@ -79,8 +135,11 @@ networks:
     driver: overlay
     attachable: true
 
+volumes:
+  forecast_pgdata:
+
 secrets:
-  forecast_database_url:
+  forecast_postgres_password:
     external: true
   forecast_jwt_secret:
     external: true
