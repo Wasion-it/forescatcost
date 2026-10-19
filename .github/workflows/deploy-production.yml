@@ -2,11 +2,6 @@ name: Publicação de produção
 
 on:
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: 'Tag imutável já publicada (sha-<commit completo>)'
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -16,30 +11,63 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  setup:
+    name: Preparar ambiente
+    uses: ./.github/workflows/includes-environment.yml
+    with:
+      environment: prod
+
+  test:
+    name: Validar projeto
+    needs: setup
+    uses: ./.github/workflows/includes-test.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  build:
+    name: Empacotar aplicação
+    needs: [setup, test]
+    uses: ./.github/workflows/includes-build.yml
+    with:
+      environment: ${{ needs.setup.outputs.environment }}
+
+  container-build:
+    name: Construir e publicar imagens imutáveis
+    needs: [test, build]
+    uses: ./.github/workflows/includes-container-build.yml
+    secrets: inherit
+    with:
+      image_tag: sha-${{ github.sha }}
+      push: true
+      runner_label: self-hosted
+
   deploy:
-    name: Publicar Forecast em produção
+    name: Publicar imagens no servidor
+    needs: [setup, container-build]
     uses: ./.github/workflows/includes-remote-deploy.yml
     secrets: inherit
     with:
-      environment: prod
+      environment: ${{ needs.setup.outputs.environment }}
+      runner_label: self-hosted
       deploy_host: ${{ vars.DEPLOY_PROD_HOST }}
       deploy_user: ${{ vars.DEPLOY_PROD_USER }}
       deploy_path: ${{ vars.DEPLOY_PROD_PATH }}
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: sha-${{ github.sha }}
       frontend_port: ${{ vars.FORECAST_FRONTEND_PORT || '18080' }}
       cors_origins: ${{ vars.FORECAST_CORS_ORIGINS || '[]' }}
 
   observability:
     name: Registrar deploy no Grafana
-    needs: deploy
+    needs: [setup, deploy]
     uses: ./.github/workflows/includes-deployment-observability.yml
     secrets:
       GRAFANA_ANNOTATION_TOKEN: ${{ secrets.GRAFANA_ANNOTATION_TOKEN }}
     with:
-      environment: prod
+      environment: ${{ needs.setup.outputs.environment }}
       grafana_url: ${{ vars.GRAFANA_URL }}
       runner_label: self-hosted
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: sha-${{ github.sha }}
+      commit: ${{ github.sha }}
       actor: ${{ github.actor }}
       run_id: ${{ github.run_id }}
       run_number: ${{ github.run_number }}
@@ -47,35 +75,41 @@ jobs:
 
   release:
     name: Publicar release
-    needs: deploy
+    needs: [setup, container-build, deploy]
     uses: ./.github/workflows/includes-release.yml
     permissions:
       contents: write
     with:
-      environment: prod
-      image_tag: ${{ inputs.image_tag }}
+      environment: ${{ needs.setup.outputs.environment }}
+      image_tag: sha-${{ github.sha }}
 
   report:
     name: Resumo final
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [deploy, observability, release]
+    needs: [setup, test, build, container-build, deploy, observability, release]
     steps:
       - name: Gerar resumo
+        shell: bash
         run: |
           {
             echo '## Publicação de produção - Forecast'
             echo ''
             echo '- Disparo: manual via workflow_dispatch'
+            echo "- Projeto: ${{ needs.setup.outputs.project }}"
+            echo "- Ambiente: ${{ needs.setup.outputs.environment }}"
+            echo "- Testes: ${{ needs.test.result }}"
+            echo "- Build lógico: ${{ needs.build.result }}"
+            echo "- Build de imagens: ${{ needs.container-build.result }}"
             echo "- Deploy: ${{ needs.deploy.result }}"
             echo "- Observabilidade: ${{ needs.observability.outputs.annotation_result }}"
             if [ -n "${{ needs.observability.outputs.annotation_id }}" ]; then
               echo "- Grafana Annotation ID: ${{ needs.observability.outputs.annotation_id }}"
             fi
-            echo "- Release: ${{ needs.release.result }}"
-            echo "- Release URL: ${{ needs.release.outputs.release_url }}"
-            echo "- Tag imutável: ${{ inputs.image_tag }}"
+            echo "- Release: ${{ needs.release.outputs.release_url }}"
+            echo "- Commit: ${{ github.sha }}"
             echo "- Executado por: ${{ github.actor }}"
             echo "- GitHub Run: #${{ github.run_number }}"
+            echo "- Tag imutável: sha-${{ github.sha }}"
             echo '- Registry: registry.wasion.com.br'
           } >> "$GITHUB_STEP_SUMMARY"
