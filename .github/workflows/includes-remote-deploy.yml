@@ -128,9 +128,12 @@ jobs:
             fi
 
             echo 'Validando Docker Swarm Secrets obrigatórias...'
-            for secret in forecast_database_url forecast_jwt_secret; do
+            for secret in forecast_postgres_password forecast_jwt_secret; do
               if ! docker secret inspect "$secret" >/dev/null 2>&1; then
                 echo "ERRO: Docker Swarm Secret ausente: $secret"
+                echo 'Crie as secrets no manager antes do deploy:'
+                echo '  openssl rand -hex 24 | docker secret create forecast_postgres_password -'
+                echo '  openssl rand -hex 32 | docker secret create forecast_jwt_secret -'
                 exit 1
               fi
             done
@@ -152,6 +155,22 @@ jobs:
               -c docker-compose.prod.yml \
               "$STACK_NAME"
 
+            echo 'Aguardando postgres convergir...'
+            for i in $(seq 1 24); do
+              sleep 5
+              STATE=$(docker service ps "${STACK_NAME}_postgres" \
+                --filter 'desired-state=running' \
+                --format '{{.CurrentState}}' | head -1)
+              echo "  [${i}/24] postgres: ${STATE}"
+              if echo "$STATE" | grep -q '^Running'; then
+                break
+              fi
+              if [ "$i" -eq 24 ]; then
+                docker service logs "${STACK_NAME}_postgres" --tail 80 || true
+                exit 1
+              fi
+            done
+
             echo 'Aguardando backend convergir...'
             for i in $(seq 1 24); do
               sleep 5
@@ -163,6 +182,7 @@ jobs:
                 break
               fi
               if [ "$i" -eq 24 ]; then
+                docker service ps "${STACK_NAME}_backend" --no-trunc || true
                 docker service logs "${STACK_NAME}_backend" --tail 80 || true
                 exit 1
               fi
