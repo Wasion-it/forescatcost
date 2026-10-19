@@ -9,7 +9,7 @@ Imagens:
 - `registry.wasion.com.br/wasion/forecast-backend:sha-<commit>`
 - `registry.wasion.com.br/wasion/forecast-frontend:sha-<commit>`
 
-A stack de produção é stateless. O PostgreSQL de produção deve ser externo à stack da aplicação.
+A stack de produção inclui um PostgreSQL leve (`postgres:16-alpine`) como serviço `postgres`, acessível apenas pela rede overlay `forecast_internal` (nenhuma porta é publicada no host). Backend e frontend continuam stateless.
 
 ## Deploy de produção em um clique
 
@@ -34,10 +34,33 @@ Assim, o mesmo commit que passou pelo pipeline é o commit empacotado, publicado
 
 Criar previamente no manager do Swarm:
 
-- `forecast_database_url`: URL SQLAlchemy completa do PostgreSQL de produção.
+- `forecast_postgres_password`: senha do usuário `forecast` do PostgreSQL da stack.
 - `forecast_jwt_secret`: chave JWT forte e exclusiva do ambiente.
 
+Criação no manager do Swarm:
+
+```bash
+openssl rand -hex 24 | docker secret create forecast_postgres_password -
+openssl rand -hex 32 | docker secret create forecast_jwt_secret -
+```
+
+A senha do banco deve conter apenas caracteres hexadecimais (`openssl rand -hex 24`). O backend monta a `DATABASE_URL` (`postgresql+psycopg://forecast:<senha>@postgres:5432/forecast`) a partir dessa senha, sem URL-encode; por isso caracteres especiais não são suportados.
+
 Os valores não devem ser versionados no GitHub nem armazenados no manifesto.
+
+## PostgreSQL da stack
+
+O serviço `postgres` usa `POSTGRES_DB=forecast` e `POSTGRES_USER=forecast`. Na primeira subida, com o volume vazio, a imagem cria o database `forecast` e o usuário automaticamente, usando a senha da secret `forecast_postgres_password`. Nenhuma criação manual de database é necessária. O backend aguarda o banco ficar disponível (até 30 tentativas, a cada 2s) e então aplica as migrations.
+
+Os dados ficam no volume nomeado `forecast_pgdata`, local ao nó manager (o serviço é fixado em `node.role == manager` para o volume não migrar). A atualização do banco usa `stop-first` para nunca haver dois PostgreSQL sobre o mesmo volume.
+
+Backup com `pg_dump`:
+
+```bash
+docker exec $(docker ps -q -f name=forecast_postgres) pg_dump -U forecast forecast | gzip > backup.sql.gz
+```
+
+Atenção: remover o volume `forecast_pgdata` (por exemplo, `docker volume rm` ou `docker stack rm` seguido de limpeza de volumes) apaga todos os dados do banco. `docker stack rm` sozinho preserva o volume.
 
 ## Porta de publicação
 
@@ -54,9 +77,9 @@ O reverse proxy corporativo (Nginx Proxy Manager no servidor de Production Apps)
 - `APP_VERSION`
 - `APP_COMMIT`
 - `APP_ENVIRONMENT`
-- `FORECAST_CORS_ORIGENS`
+- `FORECAST_CORS_ORIGINS`
 - `FORECAST_FRONTEND_PORT`
 
 ## Migrações
 
-O backend executa `alembic upgrade head` antes de iniciar o Uvicorn. Migrações de produção devem permanecer compatíveis com a versão anterior durante atualizações `start-first`.
+O backend executa `alembic upgrade head` antes de iniciar o Uvicorn, repetindo a tentativa enquanto o PostgreSQL ainda não aceita conexões. Migrações de produção devem permanecer compatíveis com a versão anterior durante atualizações `start-first`.
