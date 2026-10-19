@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_expiracao_minutos: int = 480
     cors_origens: list[str] = ["http://localhost:5173"]
 
+    # Metadados injetados pelo pipeline para rastreabilidade do deploy.
+    app_version: str = "0.1.0-dev"
+    app_commit: str = "unknown"
+    app_environment: str = "dev"
+
     # --- LDAP / Active Directory (login de usuários comuns; o admin local continua por senha)
     ldap_enabled: bool = False
     ldap_server_uri: str = ""  # ex.: ldaps://ad.empresa.local:636 ou ldap://ad.empresa.local:389
