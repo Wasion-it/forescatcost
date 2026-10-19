@@ -7,6 +7,11 @@ on:
         description: Nome do ambiente
         required: true
         type: string
+      runner_label:
+        description: Runner interno usado para executar o deploy
+        required: false
+        type: string
+        default: self-hosted
       deploy_host:
         description: Host do servidor de deploy
         required: true
@@ -44,7 +49,7 @@ on:
 jobs:
   deploy:
     name: Publicar Forecast no Docker Swarm
-    runs-on: self-hosted
+    runs-on: ${{ inputs.runner_label }}
     environment: ${{ inputs.environment }}
     timeout-minutes: 30
 
