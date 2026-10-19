@@ -192,6 +192,22 @@ jobs:
               sleep 5
             done
 
+            echo 'Validando commit publicado via /api/v1/health...'
+            for i in $(seq 1 12); do
+              HEALTH=$(curl -fsS "http://127.0.0.1:${FORECAST_FRONTEND_PORT}/api/v1/health" || true)
+              echo "  [${i}/12] ${HEALTH}"
+              if echo "$HEALTH" | grep -Fq "\"commit\":\"${APP_COMMIT}\""; then
+                echo "Healthcheck confirma o commit publicado: ${APP_COMMIT}"
+                break
+              fi
+              if [ "$i" -eq 12 ]; then
+                echo 'ERRO: healthcheck não confirmou o commit esperado.'
+                docker service logs "${STACK_NAME}_backend" --tail 80 || true
+                exit 1
+              fi
+              sleep 5
+            done
+
             docker stack services "$STACK_NAME"
             docker service inspect "${STACK_NAME}_backend" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
             docker service inspect "${STACK_NAME}_frontend" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
@@ -208,6 +224,8 @@ jobs:
             echo "- Servidor: ${{ inputs.deploy_host }}"
             echo '- Stack: forecast'
             echo "- Tag: ${{ inputs.image_tag }}"
+            echo "- Commit esperado: ${{ inputs.image_tag }}"
             echo "- Porta frontend: ${{ inputs.frontend_port }}"
+            echo '- Healthcheck: commit publicado validado'
             echo '- Segredos da aplicação: Docker Swarm Secrets'
           } >> "$GITHUB_STEP_SUMMARY"
