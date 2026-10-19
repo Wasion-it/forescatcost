@@ -9,7 +9,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: forecast-deploy-production
@@ -29,11 +29,21 @@ jobs:
       frontend_port: ${{ vars.FORECAST_FRONTEND_PORT || '18080' }}
       cors_origins: ${{ vars.FORECAST_CORS_ORIGINS || '[]' }}
 
+  release:
+    name: Publicar release
+    needs: deploy
+    uses: ./.github/workflows/includes-release.yml
+    permissions:
+      contents: write
+    with:
+      environment: prod
+      image_tag: ${{ inputs.image_tag }}
+
   report:
     name: Resumo final
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: deploy
+    needs: [deploy, release]
     steps:
       - name: Gerar resumo
         run: |
@@ -42,6 +52,8 @@ jobs:
             echo ''
             echo '- Disparo: manual via workflow_dispatch'
             echo "- Deploy: ${{ needs.deploy.result }}"
+            echo "- Release: ${{ needs.release.result }}"
+            echo "- Release URL: ${{ needs.release.outputs.release_url }}"
             echo "- Tag imutável: ${{ inputs.image_tag }}"
             echo "- Executado por: ${{ github.actor }}"
             echo "- GitHub Run: #${{ github.run_number }}"
