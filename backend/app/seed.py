@@ -45,6 +45,43 @@ JUSTIFICATIVA_SISCOMEX = "Portaria ME 4.131/2021 (vigente desde jun/2021)"
 JUSTIFICATIVA_TCIF = "Lei 13.451/2017, art. 8º, § 2º: R$ 250,00 por PLI e R$ 45,00 por mercadoria"
 JUSTIFICATIVAS = {"tcif_valor_ip": JUSTIFICATIVA_TCIF, "tcif_valor_item": JUSTIFICATIVA_TCIF}
 
+TERMINAIS = {
+    "Chibatão": "MARITIMO",
+    "Superterminais": "MARITIMO",
+    "Santos Brasil": "MARITIMO",
+    "TECA Aeroporto Eduardo Gomes": "AEREO",
+}
+
+# Tarifas de armazenagem por terminal, da planilha "Cálculo Armazenagem BR260630-C".
+# (terminal, chave do parâmetro, valor, justificativa). Os demais valores usam o padrão.
+PLANILHA = "Planilha Cálculo Armazenagem BR260630-C"
+# Serviços portuários fixos por processo (aba Custos Marítimos): não multiplicam por container.
+SERVICOS_PORTUARIOS = {
+    "Chibatão": {
+        "arm_mar_pesagem": "130.02", "arm_mar_infra": "570.66", "arm_mar_isps": "99.68",
+        "arm_mar_seguro": "97.65", "arm_mar_inspecao": "469.53", "arm_mar_servicos_adm": "77.22",
+    },
+    "Superterminais": {
+        "arm_mar_pesagem": "160.28", "arm_mar_infra": "715.36", "arm_mar_isps": "122.12",
+        "arm_mar_seguro": "97.65", "arm_mar_inspecao": "584.70", "arm_mar_servicos_adm": "50.38",
+    },
+}  # fmt: skip
+ARMAZENAGEM_TERMINAL = [
+    (terminal, chave, D(valor), f"{PLANILHA}, aba Custos Marítimos: serviços portuários {terminal}")
+    for terminal, servicos in SERVICOS_PORTUARIOS.items()
+    for chave, valor in servicos.items()
+] + [
+    ("Santos Brasil", "arm_mar_pct_periodo1", D("0.002"),
+     f"{PLANILHA}: armazenagem 1º período de 0,2% do CIF, antes do gross-up de impostos"),
+    ("Santos Brasil", "arm_mar_taxas_container", D("1023.02"),
+     f"{PLANILHA}: scanner 198 + remoção ao costado 655 + reembolso Embraport 32,72 "
+     "+ processamento eletrônico 32,50 + cadastro de BL 52,40 (2 linhas), antes do gross-up"),
+    ("Santos Brasil", "arm_mar_pct_impostos", D("0.1425"),
+     f"{PLANILHA}: tarifas divididas por 0,8575 (PIS/COFINS + ISS embutidos)"),
+]  # fmt: skip
+for _chave in ("arm_aer_pct", "arm_aer_taxa_kg", "arm_aer_minimo_peso"):
+    JUSTIFICATIVAS[_chave] = f"{PLANILHA}, aba Custos Aéreos (Manaus)"
+
 PERMISSOES = {
     P.IMPORTACAO_LER: "Consultar importações",
     P.IMPORTACAO_EDITAR: "Cadastrar, editar e cancelar importações",
@@ -94,6 +131,17 @@ PARAMETROS = {
     "tl_percentual": ("Transporte local sobre o valor da carga", "PERCENTUAL", "TRANSP_LOCAL", "Transporte local", D("0.0006")),
     "arm_mar_pct_periodo1": ("Armazenagem marítima, 1º período, sobre o CIF", "PERCENTUAL", "TERMINAL", "Armazenagem", D("0.0092")),
     "arm_mar_minimo": ("Armazenagem marítima, valor mínimo", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_taxas_container": ("Armazenagem marítima, serviços portuários por container", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_pesagem": ("Armazenagem marítima, pesagem de container (fixo)", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_infra": ("Armazenagem marítima, infraestrutura portuária (fixo)", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_isps": ("Armazenagem marítima, ISPS Code (fixo)", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_seguro": ("Armazenagem marítima, seguro (fixo)", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_inspecao": ("Armazenagem marítima, inspeção não invasiva (fixo)", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_servicos_adm": ("Armazenagem marítima, serviços administrativos (fixo)", "MONETARIO", "TERMINAL", "Armazenagem", D(0)),
+    "arm_mar_pct_impostos": ("Armazenagem marítima, impostos embutidos nas tarifas (PIS/COFINS + ISS)", "PERCENTUAL", "TERMINAL", "Armazenagem", D(0)),
+    "arm_aer_pct": ("Armazenagem aérea, percentual sobre o CIF", "PERCENTUAL", "TERMINAL", "Armazenagem", D("0.0165")),
+    "arm_aer_taxa_kg": ("Armazenagem aérea, tarifa por kg de peso bruto", "MONETARIO", "TERMINAL", "Armazenagem", D("0.25")),
+    "arm_aer_minimo_peso": ("Armazenagem aérea, mínimo da tarifa de peso", "MONETARIO", "TERMINAL", "Armazenagem", D("20.41")),
     "despachante_honorario_ip": ("Honorário do despachante por IP", "MONETARIO", "TIPO_IMPORTACAO", "Despachante", None),
 }  # fmt: skip
 
@@ -107,8 +155,9 @@ ALIQUOTAS = {
     },
     "INDUSTRIALIZACAO": {"II": "0.0168", "IPI": "0", "PIS": "0", "COFINS": "0", "ICMS": "0"},
 }
-# Adicionar Ativo: alíquotas de exemplo iguais às de Uso e Consumo (validar com o Fiscal)
-ALIQUOTAS["ADICIONAR_ATIVO"] = dict(ALIQUOTAS["USO_CONSUMO"])
+# Adicionar Ativo: alíquotas de exemplo iguais às de Uso e Consumo (validar com o Fiscal), mas sem
+# ICMS. Só Uso e Consumo recolhe ICMS; Industrialização e Adicionar Ativo ficam com 0.
+ALIQUOTAS["ADICIONAR_ATIVO"] = {**ALIQUOTAS["USO_CONSUMO"], "ICMS": "0"}
 
 IMPOSTOS = {
     "II": "Imposto de Importação",
@@ -155,13 +204,15 @@ def seed_base(db: Session) -> None:
     }
     db.add_all(tipos.values())
 
+    terminais = {
+        nome: Terminal(nome=nome, modal=modal) for nome, modal in TERMINAIS.items()
+    }
     db.add_all([
         Transportadora(nome="Rodo Norte Logística", tipo_servico="LOCAL"),
         Transportadora(nome="Amazon Cargo Transportes", tipo_servico="LOCAL"),
         Despachante(nome="Despachos Manaus Assessoria"),
         Despachante(nome="Aduana Norte Comissária"),
-        Terminal(nome="Chibatão", modal="MARITIMO"),
-        Terminal(nome="TECA Aeroporto Eduardo Gomes", modal="AEREO"),
+        *terminais.values(),
     ])  # fmt: skip
     db.flush()
 
@@ -186,6 +237,12 @@ def seed_base(db: Session) -> None:
                 db.add(ParametroValor(
                     parametro_id=p.id, escopo_ref_id=tipos[codigo].id, valor=valor,
                     vigencia_inicio=INICIO, justificativa="Valores informados pelo PCM",
+                ))  # fmt: skip
+        for terminal, chave_param, valor, justificativa in ARMAZENAGEM_TERMINAL:
+            if chave_param == chave:
+                db.add(ParametroValor(
+                    parametro_id=p.id, escopo_ref_id=terminais[terminal].id, valor=valor,
+                    vigencia_inicio=INICIO, justificativa=justificativa,
                 ))  # fmt: skip
 
     impostos = {}
@@ -267,7 +324,7 @@ def seed_exemplos(db: Session) -> None:
         (base(numero_ip="IP-26-0004", data_ip=date(2026, 9, 18),
               tipo_importacao_id=tipo["USO_CONSUMO"], modal="AEREO", valor_invoice=D("12800"),
               valor_frete=D("1650"), qtd_itens=3, qtd_containers=0, peso_bruto_kg=D("380"),
-              peso_liquido_kg=D("340"), valor_armazenagem_aerea=D("1840"),
+              peso_liquido_kg=D("340"),
               terminal_id=term["TECA Aeroporto Eduardo Gomes"], valor_taxa_liberacao=D(510),
               observacoes="Ferramental urgente"), "calcular"),
         (base(numero_ip="IP-26-0005", data_ip=date(2026, 10, 2),

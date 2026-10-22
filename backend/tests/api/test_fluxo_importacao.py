@@ -98,6 +98,7 @@ def test_adicionar_ativo_cobra_honorario_de_900(client, pcm, refs, payload):
     assert itens["DESPACHANTE"]["valor"] == "900.00"
     assert itens["II"]["valor"] == "0.00"
     assert itens["PIS"]["valor"] == "1260.00"  # alíquotas copiadas de Uso e Consumo
+    assert itens["ICMS"]["valor"] == "0.00"  # só Uso e Consumo tem ICMS
 
 
 def test_taxa_de_liberacao_varia_por_processo(client, pcm, payload):

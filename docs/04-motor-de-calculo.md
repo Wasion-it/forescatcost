@@ -57,8 +57,8 @@ As fórmulas de impostos são uma proposta baseada na sistemática usual de impo
 | ICMS | `(cif + taxa_siscomex + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms` | Sim | Mês da IP |
 | TCIF | `qtd_itens * p.tcif_valor_item + p.tcif_valor_ip` | Sim | Corte dia 15 |
 | Transporte local | `qtd_containers * p.tl_valor_container + valor_carga * p.tl_percentual` | Sim | Mês da IP |
-| Armazenagem marítima | `se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)` | Sim | Mês da IP |
-| Armazenagem aérea | Pendente. Até a definição: `p.arm_aerea_valor_manual` | Sim | Mês da IP |
+| Armazenagem marítima | `se(modal == 'MARITIMO', max((cif * p.arm_mar_pct_periodo1 + qtd_containers * p.arm_mar_taxas_container + p.arm_mar_pesagem + p.arm_mar_infra + p.arm_mar_isps + p.arm_mar_seguro + p.arm_mar_inspecao + p.arm_mar_servicos_adm) / (1 - p.arm_mar_pct_impostos), p.arm_mar_minimo), 0)` | Sim | Mês da IP |
+| Armazenagem aérea | `se(modal == 'AEREO', se(arm_aerea_manual > 0, arm_aerea_manual, cif * p.arm_aer_pct + max(peso_bruto * p.arm_aer_taxa_kg, p.arm_aer_minimo_peso)), 0)` | Sim | Mês da IP |
 | Despachante | `p.despachante_honorario_ip` | Sim | Mês da IP |
 | Frete internacional | `frete_brl` | Sim | Mês da IP |
 | Taxa de liberação | `valor_taxa_liberacao` (informada em cada processo) | Sim | Mês da IP |
@@ -74,6 +74,12 @@ Valores iniciais dos parâmetros:
 | `tl_percentual` | Transportadora | 0,0006 (0,06%) |
 | `arm_mar_pct_periodo1` | Terminal | 0,0092 (0,92%) |
 | `arm_mar_minimo` | Terminal | 0 (a confirmar) |
+| `arm_mar_taxas_container` | Terminal | Padrão 0. Santos Brasil 1.023,02 (por container) |
+| `arm_mar_pesagem`, `arm_mar_infra`, `arm_mar_isps`, `arm_mar_seguro`, `arm_mar_inspecao`, `arm_mar_servicos_adm` | Terminal | Padrão 0. Serviços portuários fixos por processo, sem multiplicar por container. Chibatão: 130,02 / 570,66 / 99,68 / 97,65 / 469,53 / 77,22 (total 1.444,76). Superterminais: 160,28 / 715,36 / 122,12 / 97,65 / 584,70 / 50,38 (total 1.730,49) |
+| `arm_mar_pct_impostos` | Terminal | Padrão 0. Santos Brasil 0,1425 (PIS/COFINS + ISS embutidos: tarifa ÷ 0,8575) |
+| `arm_aer_pct` | Terminal | 0,0165 (1,65% do CIF) |
+| `arm_aer_taxa_kg` | Terminal | 0,25 por kg de peso bruto (Manaus). São Paulo: 0,0612 |
+| `arm_aer_minimo_peso` | Terminal | 20,41 (mínimo da tarifa de peso) |
 | `despachante_honorario_ip` | Despachante × tipo | 715,00 (Industrialização) / 900,00 (Uso e Consumo e Adicionar Ativo) |
 | `siscomex_registro` | Global | 115,67 (por DI/Duimp) |
 | `siscomex_adicao_faixa1` a `faixa6` | Global | 38,56 / 30,85 / 23,14 / 15,42 / 7,71 / 3,86 (por adição: 1ª-2ª, 3ª-5ª, 6ª-10ª, 11ª-20ª, 21ª-50ª, 51ª em diante) |
@@ -84,6 +90,8 @@ Atenção a estes pontos:
 - Taxa Siscomex automática: como o sistema é de provisão, o valor real ainda não existe. Se o campo "Taxa Siscomex" do processo ficar vazio (0), o motor calcula `siscomex_registro` + soma das adições por faixa (Portaria ME 4.131/2021). Se o usuário informar um valor maior que zero, ele prevalece. O número de adições é estimado por `qtd_itens` (cada adição agrupa um ou mais itens, então a estimativa é conservadora). Exemplo: 10 itens = 115,67 + 2×38,56 + 3×30,85 + 5×23,14 = 401,04. Os valores são parâmetros com vigência; se a Receita reajustar, cadastre nova vigência em Parâmetros, sem mexer na fórmula.
 - Siscomex fora do CIF: o CIF é o valor aduaneiro (FOB + frete), igual ao da DI. A Taxa Siscomex não entra na base de II, IPI, PIS, COFINS, armazenagem e transporte. Ela entra só na base do ICMS, pelo componente `taxa_siscomex` (valor informado ou calculado). Validado com a DI do IMP-00010: CIF da DI R$ 18.818,26, sem a taxa de R$ 308,48. A diferença de R$ 0,02 vem do arredondamento da conversão (a DI trunca). O componente Taxa Siscomex (grupo de impostos) mostra o valor e compõe a provisão.
 - Com II e IPI suspensos (padrão), os dois valem 0,00 e o ICMS parte de CIF + Siscomex + PIS + COFINS. Com `ii_suspenso` ou `ipi_suspenso` = 0 para um tipo, a fórmula volta a calcular o imposto e o ICMS o inclui. A memória do item guarda `suspenso: true` quando a suspensão se aplica.
+- Armazenagem (planilha "Cálculo Armazenagem BR260630-C"): na marítima, o 1º período é `CIF × percentual` mais os serviços portuários do terminal. No Chibatão e na Superterminais eles são seis valores fixos por processo (pesagem, infraestrutura, ISPS, seguro, inspeção não invasiva e serviços administrativos), que não multiplicam por container. Na Santos Brasil são valores por container, em `arm_mar_taxas_container`. A Santos Brasil embute PIS/COFINS + ISS nas tarifas, então o total é dividido por `1 - arm_mar_pct_impostos`. Os períodos seguintes (1,69%, 2,38%, 3,00%...) são "valor extra" na planilha e não entram na provisão. Na aérea, soma-se 1,65% do CIF à tarifa de peso (`peso bruto × tarifa por kg`, nunca abaixo do mínimo). Se o usuário informar a armazenagem aérea no processo, o valor informado prevalece. Os valores são por terminal: para outro terminal (ex.: aeroporto de São Paulo), cadastre o terminal e os valores em Parâmetros.
+- ICMS só em Uso e Consumo: Industrialização e Adicionar Ativo têm alíquota de ICMS 0 (tabela de alíquotas), então o componente ICMS vale 0,00 nesses tipos. A fórmula não muda; se o Fiscal definir outra regra, basta cadastrar nova vigência da alíquota.
 - A taxa de liberação é um componente próprio e vem do processo, nunca de um parâmetro fixo.
 - AFRMM e transporte secundário foram removidos. Os componentes ficam inativos no banco só para preservar o histórico de cálculos antigos.
 - O frete aparece no CIF (base) e no componente "Frete internacional" (desembolso). Por isso o total soma apenas itens com `compoe_provisao = true` (RN20).

@@ -307,7 +307,9 @@ export function FormularioImportacao() {
             "Deixe em branco para o sistema estimar pelo nº de itens (tabela oficial). Informe só se já souber o valor real.",
           )}
           {f.modal === "AEREO" &&
-            campoNumero("valor_armazenagem_aerea", "Armazenagem aérea (R$)", "Informada manualmente até a regra ser definida")}
+            campoNumero("valor_armazenagem_aerea", "Armazenagem aérea (R$)",
+              "Deixe em branco para o sistema calcular (percentual do CIF + tarifa por kg). Informe só se já souber o valor real.",
+            )}
           <div className="largo previa-cif" aria-live="polite">
             <span>
               Invoice <strong className="num">{Number.isFinite(previa.invoice) ? brl(previa.invoice) : "–"}</strong>

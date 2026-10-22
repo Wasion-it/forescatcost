@@ -27,6 +27,28 @@ FORMULA_TAXA_SISCOMEX = (
 FORMULA_CIF = "invoice_brl + frete_brl"
 FORMULA_ICMS = "(cif + taxa_siscomex + ii + ipi + pis + cofins) / (1 - aliq.icms) * aliq.icms"
 
+# Armazenagem marítima, 1º período (planilha "Cálculo Armazenagem", aba Custos Marítimos):
+# percentual do CIF, mais os serviços portuários por container (arm_mar_taxas_container, usado
+# pela Santos Brasil) e os serviços portuários fixos por processo do terminal (pesagem,
+# infraestrutura, ISPS, seguro, inspeção e serviços administrativos; Chibatão e Superterminais),
+# que não multiplicam por container. Os terminais que embutem PIS/COFINS + ISS nas tarifas
+# (ex.: Santos Brasil, 14,25%) usam arm_mar_pct_impostos para o gross-up (valor / (1 - %)); nos
+# demais o parâmetro é 0. Períodos seguintes não entram na provisão ("valor extra" na planilha).
+FORMULA_ARM_MARITIMA = (
+    "se(modal == 'MARITIMO', "
+    "max((cif * p.arm_mar_pct_periodo1 + qtd_containers * p.arm_mar_taxas_container "
+    "+ p.arm_mar_pesagem + p.arm_mar_infra + p.arm_mar_isps + p.arm_mar_seguro "
+    "+ p.arm_mar_inspecao + p.arm_mar_servicos_adm) "
+    "/ (1 - p.arm_mar_pct_impostos), p.arm_mar_minimo), 0)"
+)
+# Armazenagem aérea (aba Custos Aéreos): percentual do CIF mais a tarifa por kg de peso bruto,
+# respeitado o mínimo da tarifa de peso. Se o usuário informar o valor no processo, ele prevalece.
+FORMULA_ARM_AEREA = (
+    "se(modal == 'AEREO', "
+    "se(arm_aerea_manual > 0, arm_aerea_manual, "
+    "cif * p.arm_aer_pct + max(peso_bruto * p.arm_aer_taxa_kg, p.arm_aer_minimo_peso)), 0)"
+)
+
 COMPONENTES_PADRAO: list[Componente] = [
     Componente("CIF", "CIF", FORMULA_CIF, False, R.MES_REFERENCIA, 10),
     Componente(
@@ -68,7 +90,7 @@ COMPONENTES_PADRAO: list[Componente] = [
     Componente(
         "ARM_MARITIMA",
         "Armazenagem marítima",
-        "se(modal == 'MARITIMO', max(cif * p.arm_mar_pct_periodo1, p.arm_mar_minimo), 0)",
+        FORMULA_ARM_MARITIMA,
         True,
         R.MES_REFERENCIA,
         110,
@@ -76,7 +98,7 @@ COMPONENTES_PADRAO: list[Componente] = [
     Componente(
         "ARM_AEREA",
         "Armazenagem aérea",
-        "se(modal == 'AEREO', arm_aerea_manual, 0)",
+        FORMULA_ARM_AEREA,
         True,
         R.MES_REFERENCIA,
         120,
