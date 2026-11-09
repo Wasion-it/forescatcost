@@ -3,15 +3,11 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { PERM, useAuth } from "../../auth/Autenticacao";
 import { AvisoErro, Cabecalho, Carregando, Dialogo, Notificacao, Status } from "../../componentes/comuns";
-import { api, ErroApi } from "../../lib/api";
-import {
-  diferencaProvisao,
-  validarFechamento,
-  type DespesaInformada,
-  type ResultadoFechamento,
-} from "../../lib/fechamento";
-import { brl, data, dataHora, decimal2, mesLongo } from "../../lib/formato";
-import type { Calculo, Importacao, Previa, RegistroAuditoria } from "../../lib/tipos";
+import { api, baixar, ErroApi } from "../../lib/api";
+import { MARGEM_PROVISAO_PCT } from "../../lib/margem";
+import { diferencaProvisao, validarFechamentoItem, type ResultadoFechamento } from "../../lib/fechamento";
+import { brl, data, dataHora, decimal2, mesLongo, paraDecimal } from "../../lib/formato";
+import type { Calculo, CalculoItem, DespesaFechada, Importacao, Previa, RegistroAuditoria } from "../../lib/tipos";
 import { FitaCalculo } from "./FitaCalculo";
 
 type Resumo = Omit<Calculo, "itens">;
@@ -24,9 +20,11 @@ export function DetalheImportacao() {
   const [versaoSelecionada, setVersaoSelecionada] = useState<string | null>(null);
   const [calculando, setCalculando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
-  const [fechando, setFechando] = useState(false);
+  const [fechando, setFechando] = useState<CalculoItem | null>(null);
   const [animar, setAnimar] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
+  const [erroExport, setErroExport] = useState<unknown>(null);
 
   const imp = useQuery({ queryKey: ["importacao", id], queryFn: () => api.get<Importacao>(`/importacoes/${id}`) });
   const versoes = useQuery({
@@ -46,6 +44,21 @@ export function DetalheImportacao() {
     }
   }, [params, imp.data, setParams]);
 
+  async function exportar() {
+    if (!imp.data?.calculo_vigente) return;
+    setExportando(true);
+    setErroExport(null);
+    try {
+      const { numero_processo, calculo_vigente } = imp.data;
+      await baixar(`/importacoes/${id}/excel`, `provisao-${numero_processo}-v${calculo_vigente.numero_versao}.xlsx`);
+      setAviso("Planilha exportada.");
+    } catch (e) {
+      setErroExport(e);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   function aoCalcular() {
     setCalculando(false);
     setVersaoSelecionada(null);
@@ -63,7 +76,11 @@ export function DetalheImportacao() {
   const competenciaPrincipal = calculoExibido ? `${calculoExibido.data_referencia.slice(0, 7)}-01` : "";
   const cancelado = i.status === "CANCELADO";
   const fechado = i.status === "FECHADO";
-  const podeFechar = pode(PERM.importacaoEditar) && i.status === "CALCULADO" && !i.calculo_desatualizado;
+  // Com algum item fechado, o cálculo vigente fica congelado: sem editar, recalcular ou cancelar
+  const temFechamento = i.despesas_fechadas.length > 0;
+  const congelado = cancelado || fechado || temFechamento;
+  const podeFechar =
+    pode(PERM.importacaoEditar) && i.status === "CALCULADO" && !i.calculo_desatualizado && Boolean(i.calculo_vigente);
 
   return (
     <>
@@ -82,34 +99,49 @@ export function DetalheImportacao() {
           </>
         }
         acoes={
-          !cancelado &&
-          !fechado && (
-            <>
-              {pode(PERM.importacaoEditar) && (
-                <>
-                  <button className="botao botao-perigo" onClick={() => setCancelando(true)}>
-                    Cancelar processo
-                  </button>
-                  <Link to={`/importacoes/${i.id}/editar`} className="botao">
-                    Editar
-                  </Link>
-                </>
-              )}
-              {podeFechar && (
-                <button className="botao" onClick={() => setFechando(true)}>
-                  Fechar despesa
+          <>
+            {!congelado && pode(PERM.importacaoEditar) && (
+              <>
+                <button className="botao botao-perigo" onClick={() => setCancelando(true)}>
+                  Cancelar processo
                 </button>
-              )}
-              {pode(PERM.calcular) && (
-                <button className="botao botao-primario" onClick={() => setCalculando(true)}>
-                  {i.calculo_vigente ? "Recalcular" : "Calcular"}
-                </button>
-              )}
-            </>
-          )
+                <Link to={`/importacoes/${i.id}/editar`} className="botao">
+                  Editar
+                </Link>
+              </>
+            )}
+            {podeFechar && (
+              <button
+                className="botao"
+                onClick={() => {
+                  const painel = document.getElementById("painel-fechamento");
+                  painel?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  painel?.focus({ preventScroll: true });
+                }}
+              >
+                Fechar despesas
+              </button>
+            )}
+            {i.calculo_vigente && (
+              <button
+                className="botao"
+                onClick={exportar}
+                disabled={exportando}
+                title={`Itens da despesa com o provisionado e o provisionado + ${MARGEM_PROVISAO_PCT}%`}
+              >
+                {exportando ? "Exportando…" : "Exportar Excel"}
+              </button>
+            )}
+            {!congelado && pode(PERM.calcular) && (
+              <button className="botao botao-primario" onClick={() => setCalculando(true)}>
+                {i.calculo_vigente ? "Recalcular" : "Calcular"}
+              </button>
+            )}
+          </>
         }
       />
 
+      <AvisoErro erro={erroExport} titulo="Não foi possível exportar a planilha" />
       {cancelado && (
         <div className="aviso aviso-erro bloco">
           <p>
@@ -150,7 +182,7 @@ export function DetalheImportacao() {
               animar={animar && !versaoSelecionada}
               // O realizado pertence ao cálculo vigente; versões históricas têm outros itens
               realizado={
-                fechado && calculoExibido.vigente
+                temFechamento && calculoExibido.vigente
                   ? Object.fromEntries(i.despesas_fechadas.map((d) => [d.componente_codigo, d.valor]))
                   : undefined
               }
@@ -160,7 +192,7 @@ export function DetalheImportacao() {
           ) : (
             <div className="vazio">
               <p>Este processo ainda não foi calculado.</p>
-              {pode(PERM.calcular) && !cancelado && !fechado && (
+              {pode(PERM.calcular) && !congelado && (
                 <button className="botao botao-primario" onClick={() => setCalculando(true)}>
                   Calcular agora
                 </button>
@@ -170,26 +202,8 @@ export function DetalheImportacao() {
         </section>
 
         <aside className="detalhe-lateral">
-          {fechado && (
-            <section className="painel" aria-labelledby="t-fechamento">
-              <div className="painel-topo">
-                <h2 id="t-fechamento">Fechamento da despesa</h2>
-                <Status status="FECHADO" />
-              </div>
-              <dl className="manifesto">
-                <Dado rotulo="Número da fatura" valor={i.numero_fatura ?? "–"} />
-                <Dado rotulo="Total realizado" valor={brl(i.valor_fatura)} />
-                {i.calculo_vigente && i.valor_fatura && (
-                  <Dado
-                    rotulo="Diferença para a provisão"
-                    valor={formatarDiferenca(diferencaProvisao(i.calculo_vigente.total_provisionado, i.valor_fatura))}
-                  />
-                )}
-                <Dado rotulo="Fechada em" valor={dataHora(i.fechado_em)} />
-                <Dado rotulo="Fechada por" valor={i.fechado_por_nome ?? "–"} />
-              </dl>
-
-            </section>
+          {i.calculo_vigente && (fechado || temFechamento || i.status === "CALCULADO") && (
+            <PainelFechamento importacao={i} podeFechar={podeFechar} aoFechar={setFechando} />
           )}
 
           <section className="painel" aria-labelledby="t-dados">
@@ -197,6 +211,7 @@ export function DetalheImportacao() {
               <h2 id="t-dados">Dados do processo</h2>
             </div>
             <dl className="manifesto">
+              <Dado rotulo="Número da invoice" valor={i.numero_invoice ?? "–"} />
               <Dado rotulo="Data da IP" valor={data(i.data_ip)} />
               <Dado rotulo="Data prevista" valor={data(i.data_prevista)} />
               <Dado rotulo="Invoice" valor={`${i.moeda_invoice} ${decimal2(i.valor_invoice)}`} />
@@ -244,12 +259,18 @@ export function DetalheImportacao() {
         />
       )}
       {fechando && (
-        <DialogoFechamento
+        <DialogoFechamentoItem
           importacao={i}
-          aoFechar={() => setFechando(false)}
-          aoConcluir={() => {
-            setFechando(false);
-            setAviso("Despesa fechada.");
+          item={fechando}
+          aoFechar={() => setFechando(null)}
+          aoConcluir={(atualizado) => {
+            setFechando(null);
+            setAviso(
+              atualizado.status === "FECHADO"
+                ? `Fatura de ${fechando.componente_nome} registrada. Todas as despesas do processo estão fechadas.`
+                : `Fatura de ${fechando.componente_nome} registrada.`,
+            );
+            cliente.setQueryData(["importacao", id], atualizado);
             cliente.invalidateQueries({ queryKey: ["importacao", id] });
             cliente.invalidateQueries({ queryKey: ["auditoria", "importacao", id] });
             cliente.invalidateQueries({ queryKey: ["importacoes"] });
@@ -402,40 +423,164 @@ function DialogoCancelamento({ importacao, aoFechar, aoConcluir }: { importacao:
   );
 }
 
-function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: Importacao; aoFechar: () => void; aoConcluir: () => void }) {
-  // Cada item que compõe a despesa recebe o valor realizado (a fatura de cada despesa é individual)
-  const itens = (importacao.calculo_vigente?.itens ?? []).filter((it) => it.compoe_provisao);
-  const codigos = itens.map((it) => it.componente_codigo);
+/**
+ * Itens da despesa do processo, cada um fechado com a própria fatura quando ela chega.
+ * O processo fica "Fechado" junto com o último item.
+ */
+function PainelFechamento({
+  importacao: i,
+  podeFechar,
+  aoFechar,
+}: {
+  importacao: Importacao;
+  podeFechar: boolean;
+  aoFechar: (item: CalculoItem) => void;
+}) {
+  const itens = (i.calculo_vigente?.itens ?? []).filter((it) => it.compoe_provisao);
+  const porCodigo = new Map<string, DespesaFechada>(i.despesas_fechadas.map((d) => [d.componente_codigo, d]));
+  const fechados = itens.filter((it) => porCodigo.has(it.componente_codigo)).length;
+  const fechado = i.status === "FECHADO";
+  // Processos fechados antes do fechamento por item têm só o total e um número de fatura
+  const legado = fechado && i.despesas_fechadas.length === 0;
+  const realizado = i.despesas_fechadas.reduce((s, d) => s + Number(d.valor), 0);
+
+  return (
+    <section className="painel" aria-labelledby="t-fechamento" id="painel-fechamento" tabIndex={-1}>
+      <div className="painel-topo">
+        <h2 id="t-fechamento">Fechamento da despesa</h2>
+        {fechado ? (
+          <Status status="FECHADO" />
+        ) : (
+          <span className="suave">
+            {fechados} de {itens.length} {itens.length === 1 ? "fechado" : "fechados"}
+          </span>
+        )}
+      </div>
+
+      {!legado && (
+        <ul className="despesas">
+          {itens.map((it) => {
+            const d = porCodigo.get(it.componente_codigo);
+            return (
+              <li key={it.componente_codigo} className={d ? "despesa-fechada" : undefined}>
+                <span className="despesa-nome">
+                  <strong>{it.componente_nome}</strong>
+                  <span className="suave">
+                    {d
+                      ? `Fatura ${d.numero_fatura}, ${dataHora(d.fechado_em)}${d.fechado_por_nome ? `, ${d.fechado_por_nome}` : ""}`
+                      : `Provisionado ${brl(it.valor)}`}
+                  </span>
+                </span>
+                {d ? (
+                  <span className="despesa-valor">
+                    <span className="num">{brl(d.valor)}</span>
+                    <span className="suave num">{formatarDiferenca(diferencaProvisao(it.valor, d.valor))}</span>
+                  </span>
+                ) : podeFechar ? (
+                  <button
+                    type="button"
+                    className="botao botao-pequeno"
+                    onClick={() => aoFechar(it)}
+                    aria-label={`Fechar ${it.componente_nome}`}
+                  >
+                    Fechar
+                  </button>
+                ) : (
+                  <span className="suave">Pendente</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {fechado ? (
+        <dl className="manifesto">
+          {legado && <Dado rotulo="Número da fatura" valor={i.numero_fatura ?? "–"} />}
+          <Dado rotulo="Total realizado" valor={brl(i.valor_fatura)} />
+          {i.calculo_vigente && i.valor_fatura && (
+            <Dado
+              rotulo="Diferença para a provisão"
+              valor={formatarDiferenca(diferencaProvisao(i.calculo_vigente.total_provisionado, i.valor_fatura))}
+            />
+          )}
+          <Dado rotulo="Fechada em" valor={dataHora(i.fechado_em)} />
+          <Dado rotulo="Fechada por" valor={i.fechado_por_nome ?? "–"} />
+        </dl>
+      ) : fechados > 0 ? (
+        <>
+          <dl className="manifesto">
+            <Dado rotulo="Realizado até agora" valor={brl(realizado)} />
+          </dl>
+          <p className="painel-corpo suave despesas-nota">
+            Com despesa fechada, o processo não pode mais ser editado, recalculado nem cancelado.
+          </p>
+        </>
+      ) : (
+        <p className="painel-corpo suave despesas-nota">
+          {i.calculo_desatualizado
+            ? "Recalcule o processo para fechar as despesas."
+            : "Feche cada item quando a fatura dele chegar. O processo fica fechado junto com o último."}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function DialogoFechamentoItem({
+  importacao,
+  item,
+  aoFechar,
+  aoConcluir,
+}: {
+  importacao: Importacao;
+  item: CalculoItem;
+  aoFechar: () => void;
+  aoConcluir: (atualizado: Importacao) => void;
+}) {
   const [numero, setNumero] = useState("");
-  const [textos, setTextos] = useState<Record<string, string>>({});
-  const [erros, setErros] = useState<ResultadoFechamento["erros"]>({ itens: {} });
+  const [valorTexto, setValorTexto] = useState("");
+  const [erros, setErros] = useState<ResultadoFechamento["erros"]>({});
   const fechar = useMutation({
-    mutationFn: (corpo: { numero_fatura: string; despesas: DespesaInformada[] }) =>
-      api.post<Importacao>(`/importacoes/${importacao.id}/fechar`, { versao: importacao.versao, ...corpo }),
+    mutationFn: (corpo: { numero_fatura: string; valor: string }) =>
+      api.post<Importacao>(
+        `/importacoes/${importacao.id}/despesas/${encodeURIComponent(item.componente_codigo)}/fechar`,
+        { versao: importacao.versao, ...corpo },
+      ),
     onSuccess: aoConcluir,
   });
 
-  const provisionado = importacao.calculo_vigente?.total_provisionado ?? "0";
-  const { total } = validarFechamento(numero, textos, codigos);
-  const informou = codigos.some((c) => (textos[c] ?? "").trim() !== "");
+  const pendentes = (importacao.calculo_vigente?.itens ?? []).filter(
+    (it) => it.compoe_provisao && !importacao.despesas_fechadas.some((d) => d.componente_codigo === it.componente_codigo),
+  );
+  const ultimo = pendentes.length === 1;
+  const primeiro = importacao.despesas_fechadas.length === 0;
+  let valorDigitado: string | null = null;
+  try {
+    valorDigitado = paraDecimal(valorTexto);
+  } catch {
+    valorDigitado = null;
+  }
   const errosServidor = fechar.error instanceof ErroApi ? fechar.error.campos : {};
   const erroNumero = erros.numero ?? errosServidor.numero_fatura;
-  // Erro do número aparece junto do campo; o aviso geral cobre o restante (409, itens faltando, regras de negócio)
-  const soNumero = Object.keys(errosServidor).length > 0 && Object.keys(errosServidor).every((k) => k === "numero_fatura");
-  const erroGeral = soNumero ? null : fechar.error;
+  const erroValor = erros.valor ?? errosServidor.valor;
+  // Erros de campo aparecem junto do campo; o aviso geral cobre o restante (409, regras de negócio)
+  const soCampos =
+    Object.keys(errosServidor).length > 0 && Object.keys(errosServidor).every((k) => k === "numero_fatura" || k === "valor");
+  const erroGeral = soCampos ? null : fechar.error;
 
   function enviar(e: FormEvent) {
     e.preventDefault();
-    const r = validarFechamento(numero, textos, codigos);
+    const r = validarFechamentoItem(numero, valorTexto);
     setErros(r.erros);
-    if (!r.despesas || r.erros.numero) return;
-    fechar.mutate({ numero_fatura: numero.trim(), despesas: r.despesas });
+    if (r.erros.numero || r.valor === null) return;
+    fechar.mutate({ numero_fatura: numero.trim(), valor: r.valor });
   }
 
   return (
     <Dialogo
       aberto
-      titulo={`Fechar despesa de ${importacao.numero_processo}`}
+      titulo={`Fechar ${item.componente_nome}`}
       aoFechar={aoFechar}
       rodape={
         <>
@@ -443,15 +588,19 @@ function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: I
             Cancelar
           </button>
           <button type="submit" form="form-fechamento" className="botao botao-primario" disabled={fechar.isPending}>
-            {fechar.isPending ? "Fechando…" : "Fechar despesa"}
+            {fechar.isPending ? "Fechando…" : `Fechar ${item.componente_nome}`}
           </button>
         </>
       }
     >
       <form id="form-fechamento" className="form-dialogo" onSubmit={enviar} noValidate>
         <p>
-          Informe o valor realizado de cada item da despesa. Depois de fechado, o processo não pode ser editado,
-          recalculado nem cancelado.
+          Informe a fatura de {item.componente_nome} do processo {importacao.numero_processo}.
+          {ultimo
+            ? " É o último item pendente: a despesa do processo fica fechada."
+            : primeiro
+              ? " Depois do primeiro fechamento, o processo não pode mais ser editado, recalculado nem cancelado."
+              : null}
         </p>
         <div className="campo">
           <label htmlFor="fatura-numero">Número da fatura</label>
@@ -473,73 +622,40 @@ function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: I
             </span>
           )}
         </div>
-        <table className="tabela tabela-compacta">
-          <caption className="sr-only">Valor realizado de cada item da despesa</caption>
-          <thead>
-            <tr>
-              <th scope="col">Item</th>
-              <th scope="col" className="num">
-                Provisionado
-              </th>
-              <th scope="col" className="num">
-                Realizado (R$)
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {itens.map((it) => {
-              const codigo = it.componente_codigo;
-              const erro = erros.itens[codigo];
-              return (
-                <tr key={codigo}>
-                  <td>
-                    <label htmlFor={`despesa-${codigo}`}>{it.componente_nome}</label>
-                  </td>
-                  <td className="num">{brl(it.valor)}</td>
-                  <td>
-                    <input
-                      id={`despesa-${codigo}`}
-                      className="entrada num"
-                      inputMode="decimal"
-                      value={textos[codigo] ?? ""}
-                      onChange={(e) => {
-                        setTextos((atual) => ({ ...atual, [codigo]: e.target.value }));
-                        setErros(({ itens: antigos, ...resto }) => {
-                          const { [codigo]: _, ...itensRestantes } = antigos;
-                          return { ...resto, itens: itensRestantes, total: undefined };
-                        });
-                      }}
-                      aria-invalid={Boolean(erro)}
-                      aria-describedby={erro ? `despesa-${codigo}-erro` : undefined}
-                    />
-                    {erro && (
-                      <span className="erro-campo" id={`despesa-${codigo}-erro`}>
-                        {erro}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {erros.total && (
-          <span className="erro-campo" role="alert">
-            {erros.total}
-          </span>
-        )}
+        <div className="campo">
+          <label htmlFor="fatura-valor">Valor da fatura (R$)</label>
+          <input
+            id="fatura-valor"
+            className="entrada num"
+            inputMode="decimal"
+            value={valorTexto}
+            onChange={(e) => {
+              setValorTexto(e.target.value);
+              setErros(({ valor: _, ...resto }) => resto);
+            }}
+            aria-invalid={Boolean(erroValor)}
+            aria-describedby={erroValor ? "fatura-valor-erro" : undefined}
+          />
+          {erroValor && (
+            <span className="erro-campo" id="fatura-valor-erro">
+              {erroValor}
+            </span>
+          )}
+        </div>
         <div className="comparacao comparacao-tres" aria-live="polite">
           <div>
             <span className="suave">Provisionado</span>
-            <strong className="num">{brl(provisionado)}</strong>
+            <strong className="num">{brl(item.valor)}</strong>
           </div>
           <div>
-            <span className="suave">Realizado</span>
-            <strong className="num">{informou ? brl(total) : "–"}</strong>
+            <span className="suave">Fatura</span>
+            <strong className="num">{valorDigitado !== null ? brl(valorDigitado) : "–"}</strong>
           </div>
           <div>
             <span className="suave">Diferença</span>
-            <strong className="num">{informou ? formatarDiferenca(diferencaProvisao(provisionado, total)) : "–"}</strong>
+            <strong className="num">
+              {valorDigitado !== null ? formatarDiferenca(diferencaProvisao(item.valor, valorDigitado)) : "–"}
+            </strong>
           </div>
         </div>
         <AvisoErro erro={erroGeral} />
@@ -551,7 +667,7 @@ function DialogoFechamento({ importacao, aoFechar, aoConcluir }: { importacao: I
 const ROTULOS_CAMPOS: Record<string, string> = {
   taxa_usd: "taxa USD", taxa_cny: "taxa CNY", valor_invoice: "invoice", valor_frete: "frete",
   qtd_itens: "itens", qtd_containers: "containers", observacoes: "observações", status: "situação",
-  calculo_desatualizado: "indicador de recálculo", numero_ip: "número da IP", data_ip: "data da IP",
+  calculo_desatualizado: "indicador de recálculo", numero_ip: "número da IP", numero_invoice: "número da invoice", data_ip: "data da IP",
   data_prevista: "data prevista", motivo_cancelamento: "motivo do cancelamento",
   valor_taxa_liberacao: "taxa de liberação", valor_siscomex: "taxa Siscomex", valor_fatura: "valor da fatura",
   numero_fatura: "número da fatura", fechado_em: "data do fechamento", fechado_por: "responsável pelo fechamento",
@@ -676,7 +792,7 @@ function PainelHistorico({
                   <span>
                     {a.acao === "INSERT"
                       ? "Cadastrou o processo"
-                      : a.campos_alterados?.includes("numero_fatura")
+                      : a.campos_alterados?.includes("valor_fatura")
                         ? "Fechou a despesa"
                         : `Alterou ${(a.campos_alterados ?? []).map((c) => ROTULOS_CAMPOS[c] ?? c.replace(/_/g, " ")).join(", ")}`}
                   </span>

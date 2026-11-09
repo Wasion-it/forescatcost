@@ -277,8 +277,7 @@ def seed_exemplos(db: Session) -> None:
     from app.modules.calculo import service as calculo
     from app.modules.importacoes import service as importacoes
     from app.modules.importacoes.schemas import (
-        DespesaFechamento,
-        FechamentoDespesa,
+        FechamentoItem,
         ImportacaoEntrada,
     )
 
@@ -316,7 +315,8 @@ def seed_exemplos(db: Session) -> None:
         (base(numero_ip="IP-26-0002", data_ip=date(2026, 8, 21),
               tipo_importacao_id=tipo["USO_CONSUMO"], valor_invoice=D("38500"), valor_frete=D("2900"),
               qtd_itens=6, qtd_containers=1, peso_bruto_kg=D("4200"), peso_liquido_kg=D("3900"),
-              valor_taxa_liberacao=D(420), observacoes="Peças de manutenção"), "calcular"),
+              valor_taxa_liberacao=D(420), observacoes="Peças de manutenção"),
+         "calcular_e_fechar_parte"),
         (base(numero_ip="IP-26-0003", data_ip=date(2026, 9, 9),
               tipo_importacao_id=tipo["INDUSTRIALIZACAO"], moeda_invoice="CNY", valor_invoice=D("1450000"),
               valor_frete=D("8200"), qtd_itens=32, qtd_containers=4, peso_bruto_kg=D("52000"),
@@ -354,7 +354,9 @@ def seed_exemplos(db: Session) -> None:
               qtd_itens=2, qtd_containers=1, peso_bruto_kg=D("900"), peso_liquido_kg=D("820")), "cancelar"),
     ]  # fmt: skip
 
-    for dados, acao in exemplos:
+    for n, (dados, acao) in enumerate(exemplos, start=1):
+        if dados.numero_ip:
+            dados.numero_invoice = f"INV-2026-{n:04d}"
         imp = importacoes.criar(db, dados, pcm)
         if acao == "rascunho":
             continue
@@ -366,25 +368,25 @@ def seed_exemplos(db: Session) -> None:
             imp.taxa_cny = D("0.7598")
             imp.calculo_desatualizado = True
             db.flush()
-        if acao == "calcular_e_fechar":
-            db.refresh(imp)
-            # Realizado = provisionado em cada item, com R$ 120,50 a mais no último
+        if acao in ("calcular_e_fechar", "calcular_e_fechar_parte"):
+            # Cada item fecha com a própria fatura. Realizado = provisionado, com R$ 120,50 a
+            # mais no último; no fechamento parcial, só os impostos chegaram.
             itens = [i for i in vigente.itens if i.compoe_provisao]
-            despesas = [
-                DespesaFechamento(
-                    componente_codigo=i.componente_codigo,
-                    valor=i.valor + (D("120.50") if i is itens[-1] else D(0)),
+            if acao == "calcular_e_fechar_parte":
+                itens = [i for i in itens if i.natureza == "IMPOSTO"]
+            for seq, item in enumerate(itens, start=1):
+                db.refresh(imp)
+                importacoes.fechar_item(
+                    db,
+                    imp,
+                    item.componente_codigo,
+                    FechamentoItem(
+                        versao=imp.versao,
+                        numero_fatura=f"FT-2026/{n:02d}{seq:02d}",
+                        valor=item.valor + (D("120.50") if item is itens[-1] else D(0)),
+                    ),
+                    pcm,
                 )
-                for i in itens
-            ]
-            importacoes.fechar(
-                db,
-                imp,
-                FechamentoDespesa(
-                    versao=imp.versao, numero_fatura="FT-2026/0412", despesas=despesas
-                ),
-                pcm,
-            )
     print(f"{len(exemplos)} processos de exemplo carregados.")
 
 

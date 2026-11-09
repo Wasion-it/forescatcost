@@ -78,19 +78,19 @@ Fluxos alternativos:
 ### UC22: Fechar a despesa do processo
 - Ator: Analista PCM (`importacao:editar`)
 - Pré-condições: processo CALCULADO, sem recálculo pendente. Não confundir com o fechamento de competência (UC18).
-- Pós-condição: processo FECHADO, com valor da fatura, número da fatura, data/hora e usuário do fechamento, e auditoria da alteração (RN23).
+- Pós-condição: o item fica fechado com o valor e o número da sua fatura, data/hora e usuário, com auditoria (RN23). Quando o último item é fechado, o processo passa a FECHADO, com o total realizado, data/hora e usuário.
 
-Fluxo principal:
-1. No detalhe do processo, o usuário aciona "Fechar despesa".
-2. O usuário informa o valor realizado de cada item da despesa (zero ou mais, 2 casas; o total deve ser maior que zero) e o número da fatura (até 60 caracteres).
+Fluxo principal (repetido para cada item, conforme as faturas chegam):
+1. No detalhe do processo, o painel "Fechamento da despesa" lista os itens da despesa, pendentes ou fechados. O usuário aciona "Fechar" em um item pendente.
+2. O usuário informa o número da fatura daquele item (até 60 caracteres) e o valor (zero ou mais, 2 casas).
 3. O sistema valida os campos e a versão do processo (controle otimista).
-4. O sistema grava o fechamento e o processo passa a FECHADO. A provisão não muda.
+4. O sistema grava o fechamento do item. Se era o último pendente, o processo passa a FECHADO (o total deve ser maior que zero). A provisão não muda.
 
 Fluxos alternativos:
 - 3a. Processo em rascunho: orienta a calcular antes. Com recálculo pendente: orienta a recalcular antes.
-- 3b. Processo já fechado ou cancelado: bloqueia.
-- 3c. Outra pessoa alterou o processo (versão diferente): bloqueia e pede para recarregar.
-- Depois de fechado, o processo não pode ser editado, recalculado nem cancelado.
+- 3b. Item já fechado, item que não faz parte da despesa, processo fechado ou cancelado: bloqueia.
+- 3c. Outra pessoa alterou o processo (versão diferente, inclusive por ter fechado outro item): bloqueia e pede para recarregar.
+- Depois do primeiro item fechado, o processo não pode ser editado, recalculado nem cancelado.
 
 ### UC06: Calcular / recalcular importação
 - Ator: Analista PCM (ou Agendador, em lote)

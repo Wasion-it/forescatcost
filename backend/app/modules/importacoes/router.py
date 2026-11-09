@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -11,12 +11,12 @@ from app.core.deps import Permissoes, exigir
 from app.core.erros import ErroNegocio
 from app.models import Calculo, Usuario
 from app.modules.calculo import service as calculo_service
-from app.modules.importacoes import service
+from app.modules.importacoes import excel, service
 from app.modules.importacoes.schemas import (
     CalculoResumo,
     CalculoSaida,
     Cancelamento,
-    FechamentoDespesa,
+    FechamentoItem,
     ImportacaoAtualizacao,
     ImportacaoDetalhe,
     ImportacaoEntrada,
@@ -65,6 +65,7 @@ def listar(
             "id": imp.id,
             "numero_processo": imp.numero_processo,
             "numero_ip": imp.numero_ip,
+            "numero_invoice": imp.numero_invoice,
             "data_referencia": imp.data_referencia,
             "data_ip": imp.data_ip,
             "tipo_importacao": imp.tipo_importacao,
@@ -105,11 +106,37 @@ def cancelar(importacao_id: UUID, dados: Cancelamento, db: DB, _: Editar):
     return _detalhe(db, imp)
 
 
-@router.post("/{importacao_id}/fechar", response_model=ImportacaoDetalhe)
-def fechar(importacao_id: UUID, dados: FechamentoDespesa, db: DB, usuario: Editar):
-    imp = service.fechar(db, service.obter(db, importacao_id), dados, usuario)
+@router.post(
+    "/{importacao_id}/despesas/{componente_codigo}/fechar", response_model=ImportacaoDetalhe
+)
+def fechar_despesa(
+    importacao_id: UUID,
+    componente_codigo: Annotated[str, Path(min_length=1, max_length=30)],
+    dados: FechamentoItem,
+    db: DB,
+    usuario: Editar,
+):
+    """Fecha um item da despesa (imposto, taxa, frete...) com a fatura dele."""
+    imp = service.obter(db, importacao_id)
+    imp = service.fechar_item(db, imp, componente_codigo, dados, usuario)
     db.commit()
     return _detalhe(db, imp)
+
+
+@router.get("/{importacao_id}/excel")
+def exportar(importacao_id: UUID, db: DB, usuario: Ler):
+    """Planilha da provisão do processo, item a item, com o provisionado + margem."""
+    imp = service.obter(db, importacao_id)
+    vigente = calculo_service.calculo_vigente(db, imp.id)
+    if vigente is None:
+        raise ErroNegocio("Calcule o processo antes de exportar")
+    conteudo = excel.gerar_excel(imp, vigente, service.despesas_fechadas(db, imp), usuario.nome)
+    nome = f"provisao-{imp.numero_processo}-v{vigente.numero_versao}.xlsx"
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+    )
 
 
 @router.post("/{importacao_id}/calculos/previa", response_model=PreviaSaida)

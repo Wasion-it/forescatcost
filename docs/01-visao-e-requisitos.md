@@ -77,7 +77,7 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | TCIF | Taxa de Controle de Incentivos Fiscais (SUFRAMA) |
 | Taxa de liberação | Despesa de liberação da carga, informada em cada processo (varia por agente e por processo). Aparece separada do frete internacional |
 | Suspensão (II/IPI) | Condição em que o Imposto de Importação ou o IPI não é pago. Controlada por parâmetro e, por padrão, vale para todos os tipos |
-| Fechamento da despesa | Ação sobre um processo calculado: o PCM informa o valor e o número da fatura e o processo passa a FECHADO. Vale por processo e não é o fechamento de competência (mensal, do Financeiro, previsto para a R1) |
+| Fechamento da despesa | Ação sobre cada item da despesa de um processo calculado: conforme a fatura chega, o PCM informa o valor e o número da fatura daquele item. Com o último item fechado, o processo passa a FECHADO. Não é o fechamento de competência (mensal, do Financeiro, previsto para a R1) |
 | Competência | Mês em que o valor entra na provisão financeira |
 | Parâmetro com vigência | Valor válido de uma data inicial até uma data final, sem sobrescrever o histórico |
 | Memória de cálculo | Registro de fórmula, variáveis e resultado de cada componente |
@@ -106,18 +106,18 @@ As permissões devem ser granulares (ex.: `importacao:editar`, `parametro:altera
 | RN19 | O número da IP é único quando informado. É texto livre (até 30 caracteres), sem validação de formato fiscal. |
 | RN21 | II e IPI são suspensos (não pagos) por padrão, controlados pelos parâmetros ii_suspenso e ipi_suspenso (1 = suspenso, 0 = cobra), com exceção possível por tipo de importação e vigência. Suspenso, o valor é 0,00 e o ICMS não os inclui na base. A memória de cálculo marca o item como suspenso. |
 | RN22 | A Taxa Siscomex é um componente do grupo de impostos e compõe a provisão. O valor fica fora do CIF e é somado só na base do ICMS (RN02). Se o processo não informar o valor, o sistema calcula pela tabela oficial (valor por DI + faixas por adição, adições estimadas por qtd_itens); valor informado maior que zero prevalece (doc 04). |
-| RN23 | Fechamento da despesa (por processo): só processo CALCULADO e sem recálculo pendente pode ser fechado. O fechamento exige o valor realizado de cada item que compõe a despesa (zero ou mais, 2 casas, todos os itens do cálculo vigente que compõem a provisão), com total maior que zero, e o número da fatura (texto, até 60 caracteres, sem espaços nas pontas). O valor da fatura do processo é a soma dos itens. Registra data/hora e usuário. Processo FECHADO não pode ser editado, recalculado nem cancelado e continua somando na provisão. A regra é garantida também por constraint no banco. Não substitui o fechamento de competência (RN17, R1). |
+| RN23 | Fechamento da despesa (por item): cada item que compõe a despesa do cálculo vigente (impostos, taxas, frete, serviços) é fechado separadamente, conforme a fatura dele chega, com o valor realizado (zero ou mais, 2 casas) e o próprio número de fatura (texto, até 60 caracteres, sem espaços nas pontas). Só processo CALCULADO e sem recálculo pendente aceita fechamentos; cada item fecha uma única vez. Cada fechamento registra data/hora e usuário. Com o primeiro item fechado, o processo não pode mais ser editado, recalculado nem cancelado. Ao fechar o último item, o processo passa a FECHADO e o valor da fatura do processo é a soma dos itens (deve ser maior que zero). O processo continua somando na provisão. As regras são garantidas também por constraint no banco. Não substitui o fechamento de competência (RN17, R1). |
 | RN20 | Cada componente indica se compõe o total de desembolso provisionado. Bases de cálculo, como o CIF, não somam no total, para evitar dupla contagem (o frete, por exemplo, entra no CIF e também no componente Frete Internacional). |
 
 ## 5. Requisitos funcionais
 
 ### Importações
-- RF01: Cadastrar processo com os dados de entrada (IP, data da IP, tipo, invoice e moeda, frete e moeda, itens, containers, taxas USD/CNY, Siscomex, pesos, observações).
+- RF01: Cadastrar processo com os dados de entrada (IP, data da IP, tipo, número da invoice (opcional, texto de até 60 caracteres, pesquisável na lista), valor da invoice e moeda, frete e moeda, itens, containers, taxas USD/CNY, Siscomex, pesos, observações).
 - RF02: Permitir processo sem IP (previsão antecipada), usando data prevista para competência.
 - RF03: Editar processo nos status permitidos, com controle de concorrência (versão otimista).
 - RF04: Consultar com filtros (período, tipo, status, IP, transportadora, despachante) e paginação.
 - RF05: Cancelar processo com motivo.
-- RF05a: Fechar a despesa do processo calculado informando valor e número da fatura (RN23).
+- RF05a: Fechar cada item da despesa do processo calculado, um de cada vez, informando valor e número da fatura do item (RN23).
 - RF06: Vincular transportadora, despachante, terminal e modal (marítimo/aéreo).
 
 ### Cálculo

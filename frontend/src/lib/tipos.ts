@@ -57,6 +57,7 @@ export type StatusImportacao = "RASCUNHO" | "CALCULADO" | "FECHADO" | "CANCELADO
 
 export interface ImportacaoEntrada {
   numero_ip: string | null;
+  numero_invoice: string | null;
   data_ip: string | null;
   data_prevista: string | null;
   tipo_importacao_id: Id;
@@ -119,7 +120,9 @@ export interface Importacao extends ImportacaoEntrada {
   status: StatusImportacao;
   calculo_desatualizado: boolean;
   motivo_cancelamento: string | null;
+  /** Total realizado, data e responsável: preenchidos quando o último item da despesa é fechado. */
   valor_fatura: Decimal | null;
+  /** Só em processos fechados antes do fechamento por item; hoje o número fica em cada item. */
   numero_fatura: string | null;
   fechado_em: string | null;
   fechado_por_nome: string | null;
@@ -131,7 +134,7 @@ export interface Importacao extends ImportacaoEntrada {
   despachante: RefNome | null;
   terminal: RefNome | null;
   calculo_vigente: Calculo | null;
-  /** Valor realizado de cada item, informado no fechamento (vazio em processos fechados só com o total). */
+  /** Itens da despesa já fechados, cada um com a sua fatura (os demais estão pendentes). */
   despesas_fechadas: DespesaFechada[];
 }
 
@@ -142,12 +145,16 @@ export interface DespesaFechada {
   ordem: number;
   provisionado: Decimal;
   valor: Decimal;
+  numero_fatura: string;
+  fechado_em: string;
+  fechado_por_nome: string | null;
 }
 
 export interface ImportacaoResumo {
   id: Id;
   numero_processo: string;
   numero_ip: string | null;
+  numero_invoice: string | null;
   data_referencia: string | null;
   data_ip: string | null;
   tipo_importacao: TipoImportacao;

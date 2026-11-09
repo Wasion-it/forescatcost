@@ -45,10 +45,24 @@
   border-bottom: 1px solid var(--linha-fraca);
 }
 
+/* Colunas de valores (provisionado, com margem e, com despesa fechada, realizado e diferença):
+   cabeçalho, topo dos grupos e linhas usam a mesma grade */
+.fita-linha summary,
+.fita-colunas,
 .fita-grupo-topo {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(100px, 2fr) repeat(2, minmax(96px, auto));
+  align-items: center;
+  gap: var(--e-4);
+}
+
+.fita-grupo-topo {
   padding: var(--e-2) var(--e-5) var(--e-1);
+}
+
+.fita-grupo-topo h3,
+.fita-col-vazia {
+  grid-column: 1 / 3;
 }
 
 .fita-grupo-topo h3 {
@@ -64,10 +78,6 @@
 }
 
 .fita-linha summary {
-  display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(120px, 2fr) minmax(110px, auto);
-  align-items: center;
-  gap: var(--e-4);
   padding: 7px var(--e-5);
   cursor: pointer;
   list-style: none;
@@ -133,6 +143,11 @@
 
 .fita-valor {
   font-weight: 500;
+}
+
+/* Provisionado + margem: valor de referência para a aprovação, secundário ao provisionado */
+.fita-margem {
+  color: var(--tinta-suave);
 }
 
 .fita-zero {
@@ -210,18 +225,6 @@
   animation-delay: calc(var(--i) * 70ms);
 }
 
-/* Despesa fechada: provisionado, realizado e diferença lado a lado em cada linha */
-.fita-com-realizado .fita-linha summary {
-  grid-template-columns: minmax(150px, 1.1fr) minmax(60px, 1fr) repeat(3, minmax(96px, auto));
-}
-
-.fita-colunas,
-.fita-com-realizado .fita-grupo-topo {
-  display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(60px, 1fr) repeat(3, minmax(96px, auto));
-  gap: var(--e-4);
-}
-
 .fita-colunas {
   padding: var(--e-2) var(--e-5);
   border-bottom: 1px solid var(--linha-fraca);
@@ -230,12 +233,40 @@
   color: var(--tinta-suave);
 }
 
-.fita-col-vazia {
-  grid-column: 1 / 3;
+/* Despesa fechada: quatro colunas de valores; a trilha sai para caber */
+.fita-com-realizado .fita-linha summary,
+.fita-com-realizado .fita-colunas,
+.fita-com-realizado .fita-grupo-topo {
+  grid-template-columns: minmax(140px, 1fr) repeat(4, minmax(84px, auto));
 }
 
-.fita-com-realizado .fita-grupo-topo h3 {
-  grid-column: 1 / 3;
+.fita-com-realizado .fita-trilha {
+  display: none;
+}
+
+.fita-com-realizado .fita-grupo-topo h3,
+.fita-com-realizado .fita-col-vazia {
+  grid-column: 1;
+}
+
+.fita-total-margem {
+  padding-top: 0;
+}
+
+.fita-total-margem span {
+  color: var(--tinta-suave);
+}
+
+.fita-total-margem strong {
+  font-size: var(--t-2xl);
+  font-weight: 500;
+  color: var(--tinta);
+}
+
+/* Item ainda sem fatura: texto, não um valor zerado */
+.fita-pendente {
+  color: var(--tinta-suave);
+  font-size: var(--t-sm);
 }
 
 .fita-total-realizado {
@@ -266,25 +297,31 @@
 }
 
 @media (max-width: 700px) {
-  .fita-linha summary {
-    grid-template-columns: 1fr auto;
+  .fita-linha summary,
+  .fita-colunas,
+  .fita-grupo-topo {
+    grid-template-columns: 1fr repeat(2, auto);
   }
   .fita-trilha {
     grid-column: 1 / -1;
     grid-row: 2;
   }
-  .fita-com-realizado .fita-linha summary {
-    grid-template-columns: 1fr repeat(3, auto);
-  }
-  .fita-com-realizado .fita-trilha {
-    display: none;
-  }
-  .fita-colunas,
-  .fita-com-realizado .fita-grupo-topo {
-    grid-template-columns: 1fr repeat(3, auto);
-  }
-  .fita-col-vazia,
-  .fita-com-realizado .fita-grupo-topo h3 {
+  .fita-grupo-topo h3,
+  .fita-col-vazia {
     grid-column: 1;
+  }
+  /* Com despesa fechada: o nome ocupa a linha e os quatro valores vêm embaixo */
+  .fita-com-realizado .fita-linha summary,
+  .fita-com-realizado .fita-colunas,
+  .fita-com-realizado .fita-grupo-topo {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--e-1) var(--e-2);
+  }
+  .fita-com-realizado .fita-nome,
+  .fita-com-realizado .fita-grupo-topo h3 {
+    grid-column: 1 / -1;
+  }
+  .fita-com-realizado .fita-col-vazia {
+    display: none;
   }
 }

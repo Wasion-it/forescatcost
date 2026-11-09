@@ -15,6 +15,7 @@ Peso = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=3)]
 
 class ImportacaoEntrada(BaseModel):
     numero_ip: str | None = Field(default=None, max_length=30)
+    numero_invoice: str | None = Field(default=None, max_length=60)
     data_ip: date | None = None
     data_prevista: date | None = None
     tipo_importacao_id: UUID
@@ -37,7 +38,7 @@ class ImportacaoEntrada(BaseModel):
     terminal_id: UUID | None = None
     observacoes: str | None = Field(default=None, max_length=2000)
 
-    @field_validator("numero_ip", "observacoes", mode="before")
+    @field_validator("numero_ip", "numero_invoice", "observacoes", mode="before")
     @classmethod
     def _vazio_para_nulo(cls, v):
         if isinstance(v, str):
@@ -66,17 +67,12 @@ class ImportacaoAtualizacao(ImportacaoEntrada):
     versao: int
 
 
-class DespesaFechamento(BaseModel):
-    """Valor realizado de um item do cálculo (identificado pelo código do componente)."""
+class FechamentoItem(BaseModel):
+    """Fatura de um item da despesa (o item vem na rota, pelo código do componente)."""
 
-    componente_codigo: str = Field(min_length=1, max_length=30)
-    valor: Dinheiro
-
-
-class FechamentoDespesa(BaseModel):
     versao: int
     numero_fatura: str = Field(min_length=1, max_length=60)
-    despesas: list[DespesaFechamento] = Field(min_length=1)
+    valor: Dinheiro
 
     @field_validator("numero_fatura", mode="before")
     @classmethod
@@ -87,13 +83,6 @@ class FechamentoDespesa(BaseModel):
                 raise ValueError("Informe o número da fatura")
         return v
 
-    @model_validator(mode="after")
-    def _sem_repetidos(self) -> FechamentoDespesa:
-        codigos = [d.componente_codigo for d in self.despesas]
-        if len(codigos) != len(set(codigos)):
-            raise ValueError("Cada item da despesa deve ser informado uma única vez")
-        return self
-
 
 class DespesaFechada(BaseModel):
     componente_codigo: str
@@ -102,6 +91,9 @@ class DespesaFechada(BaseModel):
     ordem: int
     provisionado: Decimal
     valor: Decimal
+    numero_fatura: str
+    fechado_em: datetime
+    fechado_por_nome: str | None
 
 
 class Cancelamento(BaseModel):
@@ -181,6 +173,7 @@ class ImportacaoResumo(BaseModel):
     id: UUID
     numero_processo: str
     numero_ip: str | None
+    numero_invoice: str | None
     data_referencia: date | None
     data_ip: date | None
     tipo_importacao: TipoRef

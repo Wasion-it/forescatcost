@@ -874,6 +874,54 @@ form > .cabecalho + .aviso + .painel {
   font-variant-numeric: tabular-nums;
 }
 
+/* Fechamento da despesa: um item por linha, pendente (com o botão Fechar) ou com a sua fatura */
+.despesas {
+  list-style: none;
+  margin: 0;
+  padding: var(--e-2) var(--e-5) 0;
+}
+
+.despesas li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--linha);
+}
+
+.despesa-nome,
+.despesa-valor {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.despesa-nome strong {
+  font-weight: 500;
+}
+
+.despesa-nome .suave,
+.despesa-valor .suave {
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+}
+
+.despesa-valor {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.despesas-nota {
+  padding-top: var(--e-3);
+  font-size: var(--t-sm);
+}
+
+#painel-fechamento:focus-visible {
+  outline: 2px solid var(--agua);
+  outline-offset: 2px;
+}
+
 .observacoes {
   padding: 0 var(--e-5) var(--e-4);
   color: var(--tinta-suave);

@@ -24,6 +24,7 @@ const CASAS: Record<CampoDecimal, number> = {
 
 const VAZIO: Formulario = {
   numero_ip: "",
+  numero_invoice: "",
   data_ip: "",
   data_prevista: "",
   tipo_importacao_id: "",
@@ -46,6 +47,14 @@ const VAZIO: Formulario = {
   terminal_id: "",
   observacoes: "",
 };
+
+// Data local de hoje (AAAA-MM-DD), sem o deslocamento de fuso do toISOString()
+function hojeLocal(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
 function deImportacao(i: Importacao): Formulario {
   const f = { ...VAZIO };
@@ -79,7 +88,7 @@ function paraEnvio(f: Formulario): { corpo: ImportacaoEntrada | null; erros: Rec
   for (const k of ["valor_invoice", "valor_frete"] as const) if (corpo[k] === null) erros[k] = "Obrigatório";
   if (!f.tipo_importacao_id) erros.tipo_importacao_id = "Selecione o tipo";
   for (const k of [
-    "numero_ip", "data_ip", "data_prevista", "transportadora_local_id",
+    "numero_ip", "numero_invoice", "data_ip", "data_prevista", "transportadora_local_id",
     "despachante_id", "terminal_id", "observacoes",
   ] as const) {
     if (corpo[k] === "") corpo[k] = null;
@@ -104,7 +113,8 @@ export function FormularioImportacao() {
     enabled: editando,
   });
 
-  const [f, setF] = useState<Formulario>(VAZIO);
+  // Processo novo: a data da IP já vem com a data de hoje (pode ser alterada ou apagada)
+  const [f, setF] = useState<Formulario>(() => (id ? VAZIO : { ...VAZIO, data_ip: hojeLocal() }));
   const [errosLocais, setErrosLocais] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -171,7 +181,8 @@ export function FormularioImportacao() {
   if (existente.error) return <AvisoErro erro={existente.error} />;
 
   const titulo = editando ? `Editar ${existente.data?.numero_processo}` : "Nova importação";
-  const fechado = existente.data?.status === "FECHADO";
+  // Fechado ou com algum item da despesa já fechado: o cálculo vigente fica congelado
+  const fechado = existente.data?.status === "FECHADO" || (existente.data?.despesas_fechadas.length ?? 0) > 0;
   const usaUSD = f.moeda_invoice === "USD" || f.moeda_frete === "USD";
   const usaCNY = f.moeda_invoice === "CNY" || f.moeda_frete === "CNY";
 
@@ -237,10 +248,14 @@ export function FormularioImportacao() {
 
       {fechado && (
         <div className="aviso aviso-atencao" style={{ marginBottom: "var(--e-5)" }}>
-          <p>A despesa deste processo está fechada. Ele não pode mais ser editado.</p>
+          <p>
+            {existente.data?.status === "FECHADO"
+              ? "A despesa deste processo está fechada. Ele não pode mais ser editado."
+              : "Este processo já tem despesa fechada. Ele não pode mais ser editado."}
+          </p>
         </div>
       )}
-      {existente.data?.status === "CALCULADO" && (
+      {existente.data?.status === "CALCULADO" && !fechado && (
         <div className="aviso aviso-atencao" style={{ marginBottom: "var(--e-5)" }}>
           <p>Este processo já foi calculado. Depois de salvar, recalcule para atualizar a provisão.</p>
         </div>
@@ -257,7 +272,12 @@ export function FormularioImportacao() {
             { placeholder: "IP-26-0001", maxLength: 30 },
             "Identificador da provisão. Deixe em branco se ainda não foi gerado",
           )}
-          {campoTexto("data_ip", "Data da IP", { type: "date" })}
+          {campoTexto(
+            "data_ip",
+            "Data da IP",
+            { type: "date" },
+            "Vem com a data de hoje. Altere se a IP foi gerada em outro dia",
+          )}
           {campoTexto("data_prevista", "Data prevista", { type: "date" }, "Usada para a competência enquanto não houver data da IP")}
           {seletor("tipo_importacao_id", "Tipo de importação", tipos.data ?? [], "Selecione")}
           <Campo id="modal" rotulo="Modal">
@@ -282,6 +302,12 @@ export function FormularioImportacao() {
           <h2 id="sec-valores">Valores e câmbio</h2>
         </div>
         <div className="painel-corpo grade-campos">
+          {campoTexto(
+            "numero_invoice",
+            "Número da invoice",
+            { placeholder: "INV-2026-0001", maxLength: 60 },
+            "Identifica a fatura comercial do fornecedor",
+          )}
           {campoNumero("valor_invoice", "Valor da invoice")}
           <Campo id="moeda_invoice" rotulo="Moeda da invoice">
             <select id="moeda_invoice" className="entrada" value={f.moeda_invoice} onChange={(e) => atualizar("moeda_invoice", e.target.value)}>

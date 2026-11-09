@@ -45,7 +45,7 @@ flowchart LR
     T05 -->|Simular| T07[T07 Simulação]
     T05 -->|Editar| T04
     T05 -->|Cancelar processo| T05
-    T05 -->|Fechar despesa| T05
+    T05 -->|Fechar item da despesa| T05
 
     FIN --> T08[T08 Provisão mensal]
     FIN --> T09[T09 Provisão por IP]
@@ -107,7 +107,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 ### T05: Detalhe da importação
 ```
 ┌─ IMP-0142 · IP-26-0001      · Industrialização · Marítimo ── [Calculado] ─┐
-│ [Editar] [Recalcular] [Simular] [Fechar despesa] [Cancelar] [Exportar]    │
+│ [Editar] [Recalcular] [Simular] [Fechar despesas] [Cancelar] [Exportar]   │
 ├───────────────────────────────────────────────────────────────────────────┤
 │ [Resumo] [Memória de cálculo] [Versões (3)] [Auditoria]                   │
 ├───────────────────────────────────────────────────────────────────────────┤
@@ -125,7 +125,7 @@ O status "Desatualizado" indica dados ou parâmetros alterados depois do último
 ```
 Ao clicar em um componente, abre o painel lateral com a fórmula, as variáveis, a origem dos parâmetros e a vigência.
 
-"Fechar despesa" abre um diálogo com o número da fatura e uma tabela com o valor realizado de cada item da despesa (provisionado ao lado, todos obrigatórios, com o total e a diferença para a provisão) e só aparece para processo calculado e sem recálculo pendente. Depois do fechamento, o status vira "Fechado", os botões Editar, Recalcular e Cancelar processo somem e o detalhe mostra a fatura, a data e quem fechou. Na lateral, versões do cálculo e alterações ficam em um único painel de histórico com abas (cada lista rola dentro do painel, com altura máxima). A fita de cálculo ganha, ao lado de cada item, as colunas Realizado e Diferença (realizado menos provisionado), com subtotais por grupo e o total realizado no rodapé. Isso é o fechamento da despesa do processo, diferente do fechamento de competência (T11).
+Na lateral, o painel "Fechamento da despesa" lista cada item da despesa: pendente (com o provisionado e o botão "Fechar") ou fechado (número da fatura, valor, diferença para o provisionado, data e quem fechou), com a contagem "n de N fechados". "Fechar" abre um diálogo para aquele item com "Número da fatura" e "Valor da fatura (R$)" e o resumo Provisionado / Fatura / Diferença. Os botões só aparecem para processo calculado e sem recálculo pendente; o botão "Fechar despesas" do cabeçalho leva ao painel. Com o primeiro item fechado, os botões Editar, Recalcular e Cancelar processo somem. Com o último, o status vira "Fechado" e o painel mostra o total realizado, a diferença para a provisão, a data e quem fechou. Na lateral, versões do cálculo e alterações ficam em um único painel de histórico com abas (cada lista rola dentro do painel, com altura máxima). Ao lado do provisionado, cada item da fita mostra a coluna "Com margem (20%)": o provisionado do item mais 20% de margem de segurança, para a fatura não exigir nova aprovação se vier um pouco acima. A margem é aplicada item a item (arredondada a centavos); os subtotais dos grupos e o total "Com margem de 20%" no rodapé são a soma desses valores. É só exibição: a provisão e os relatórios mensais continuam com o valor calculado. "Exportar Excel" (cabeçalho, para qualquer processo com cálculo vigente, fechado ou não) baixa a planilha do processo (`GET /api/v1/importacoes/{id}/excel`): dados do processo e do cálculo, e uma linha por item da despesa agrupada como na fita, com competência, provisionado, provisionado + 20%, situação (fechada ou pendente), número da fatura, realizado e diferença, subtotais por grupo e total. Com despesa fechada, a fita ganha também, ao lado de cada item, as colunas Realizado e Diferença (realizado menos provisionado; "Pendente" nos itens ainda sem fatura), com subtotais por grupo e, no rodapé, o total realizado ("Realizado até agora" enquanto houver item pendente). Isso é o fechamento da despesa do processo, diferente do fechamento de competência (T11).
 
 ### T07: Simulação
 ```

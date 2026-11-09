@@ -1,4 +1,4 @@
-"""Fechamento da despesa por processo: regras, bloqueios, provisão, auditoria e constraint."""
+"""Fechamento da despesa item a item: cada item fecha com a própria fatura, conforme ela chega."""
 
 from decimal import Decimal
 from itertools import count
@@ -10,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from app.core.db import SessionLocal
 
 _seq = count(500)
-FECHAMENTO = {"numero_fatura": "FT-2026/0412"}
 
 
 @pytest.fixture
@@ -52,103 +51,151 @@ def _calculado(client, headers, payload):
 
 
 def _itens_despesa(imp):
-    """Itens do cálculo vigente que compõem a despesa (um valor realizado por item)."""
+    """Itens do cálculo vigente que compõem a despesa (cada um fecha com sua fatura)."""
     calculo = imp["calculo_vigente"] or {"itens": []}  # rascunho ainda não tem cálculo
     return [i for i in calculo["itens"] if i["compoe_provisao"]]
 
 
-def _despesas(imp, acrescimo="10.00"):
-    """Realizado = provisionado + acréscimo em cada item."""
-    return [
-        {
-            "componente_codigo": i["componente_codigo"],
-            "valor": str(Decimal(i["valor"]) + Decimal(acrescimo)),
-        }
-        for i in _itens_despesa(imp)
-    ]
-
-
-def _fechar(client, headers, imp, **campos):
-    corpo = {"versao": imp["versao"], "despesas": _despesas(imp), **FECHAMENTO, **campos}
+def _fechar_item(client, headers, imp, codigo, **campos):
+    corpo = {
+        "versao": imp["versao"],
+        "numero_fatura": f"FT-{codigo}",
+        "valor": "100.00",
+        **campos,
+    }
     corpo = {k: v for k, v in corpo.items() if v is not ...}
-    return client.post(f"/api/v1/importacoes/{imp['id']}/fechar", json=corpo, headers=headers)
+    return client.post(
+        f"/api/v1/importacoes/{imp['id']}/despesas/{codigo}/fechar", json=corpo, headers=headers
+    )
 
 
-def test_fechamento_valido(client, pcm, payload):
+def _fechar_tudo(client, headers, imp, acrescimo="10.00"):
+    """Fecha item a item (realizado = provisionado + acréscimo) e devolve o último detalhe."""
+    for item in _itens_despesa(imp):
+        valor = str(Decimal(item["valor"]) + Decimal(acrescimo))
+        r = _fechar_item(client, headers, imp, item["componente_codigo"], valor=valor)
+        assert r.status_code == 200, r.text
+        imp = r.json()
+    return imp
+
+
+def test_fecha_um_item_por_vez_com_fatura_propria(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
     itens = _itens_despesa(imp)
-    assert len(itens) > 1
-    r = _fechar(client, pcm, imp, numero_fatura="  FT-2026/0412  ")
+    assert len(itens) > 2
+    primeiro, segundo = itens[0], itens[1]
+
+    r = _fechar_item(
+        client, pcm, imp, primeiro["componente_codigo"], numero_fatura="  FT-0001  ", valor="12.34"
+    )
     assert r.status_code == 200, r.text
-    corpo = r.json()
-    assert corpo["status"] == "FECHADO"
-    # o total da despesa é a soma dos itens informados
+    parcial = r.json()
+    # o processo continua calculado enquanto houver item pendente
+    assert parcial["status"] == "CALCULADO"
+    assert parcial["valor_fatura"] is None
+    assert parcial["fechado_em"] is None
+    assert parcial["versao"] > imp["versao"]
+    [fechado] = parcial["despesas_fechadas"]
+    assert fechado["componente_codigo"] == primeiro["componente_codigo"]
+    assert fechado["numero_fatura"] == "FT-0001"  # espaços aparados
+    assert Decimal(fechado["valor"]) == Decimal("12.34")
+    assert Decimal(fechado["provisionado"]) == Decimal(primeiro["valor"])
+    assert fechado["fechado_por_nome"] == "Analista PCM"
+    assert fechado["fechado_em"]
+
+    r = _fechar_item(client, pcm, parcial, segundo["componente_codigo"], numero_fatura="FT-0002")
+    assert r.status_code == 200, r.text
+    numeros = {d["componente_codigo"]: d["numero_fatura"] for d in r.json()["despesas_fechadas"]}
+    assert numeros == {
+        primeiro["componente_codigo"]: "FT-0001",
+        segundo["componente_codigo"]: "FT-0002",
+    }
+
+
+def test_ultimo_item_fecha_o_processo(client, pcm, payload):
+    imp = _calculado(client, pcm, payload)
+    itens = _itens_despesa(imp)
+    final = _fechar_tudo(client, pcm, imp)
+    assert final["status"] == "FECHADO"
     esperado = sum((Decimal(i["valor"]) + Decimal("10.00") for i in itens), Decimal(0))
-    assert Decimal(corpo["valor_fatura"]) == esperado
-    assert corpo["numero_fatura"] == "FT-2026/0412"  # espaços aparados
-    assert corpo["fechado_por_nome"] == "Analista PCM"
-    assert corpo["fechado_em"]
-    assert corpo["calculo_desatualizado"] is False
-    assert corpo["calculo_vigente"]["numero_versao"] == 1
+    assert Decimal(final["valor_fatura"]) == esperado
+    assert final["numero_fatura"] is None  # o número fica em cada item
+    assert final["fechado_por_nome"] == "Analista PCM"
+    assert final["fechado_em"]
+    assert final["calculo_vigente"]["numero_versao"] == 1
 
     detalhe = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
-    assert detalhe["status"] == "FECHADO"
-    assert detalhe["numero_fatura"] == "FT-2026/0412"
-    # cada item volta com provisionado e realizado, na ordem do cálculo
     fechadas = detalhe["despesas_fechadas"]
     assert [d["componente_codigo"] for d in fechadas] == [i["componente_codigo"] for i in itens]
-    for d, i in zip(fechadas, itens, strict=True):
-        assert Decimal(d["provisionado"]) == Decimal(i["valor"])
-        assert Decimal(d["valor"]) == Decimal(i["valor"]) + Decimal("10.00")
+    assert {d["numero_fatura"] for d in fechadas} == {f"FT-{i['componente_codigo']}" for i in itens}
 
 
-def test_valor_por_item_pode_ser_zero(client, pcm, payload):
+def test_valor_do_item_pode_ser_zero(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
-    despesas = _despesas(imp)
-    despesas[0]["valor"] = "0.00"
-    r = _fechar(client, pcm, imp, despesas=despesas)
+    codigo = _itens_despesa(imp)[0]["componente_codigo"]
+    r = _fechar_item(client, pcm, imp, codigo, valor="0.00")
     assert r.status_code == 200, r.text
     assert Decimal(r.json()["despesas_fechadas"][0]["valor"]) == 0
 
 
+def test_total_zerado_nao_fecha_o_ultimo(client, pcm, payload):
+    imp = _calculado(client, pcm, payload)
+    for item in _itens_despesa(imp)[:-1]:
+        r = _fechar_item(client, pcm, imp, item["componente_codigo"], valor="0.00")
+        assert r.status_code == 200, r.text
+        imp = r.json()
+    ultimo = _itens_despesa(imp)[-1]["componente_codigo"]
+    r = _fechar_item(client, pcm, imp, ultimo, valor="0.00")
+    assert r.status_code == 422
+    assert "maior que zero" in r.json()["detail"]
+    r = _fechar_item(client, pcm, imp, ultimo, valor="0.01")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "FECHADO"
+
+
 def test_fatura_invalida(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
-    despesas = _despesas(imp)
+    codigo = _itens_despesa(imp)[0]["componente_codigo"]
     invalidos = [
-        {"despesas": ...},
-        {"despesas": []},
-        {"despesas": [{**despesas[0], "valor": "-10.00"}, *despesas[1:]]},
-        {"despesas": [{**despesas[0], "valor": "100.123"}, *despesas[1:]]},
-        {"despesas": [{"componente_codigo": despesas[0]["componente_codigo"]}, *despesas[1:]]},
-        {"despesas": [*despesas, despesas[0]]},  # item repetido
-        {"despesas": despesas[1:]},  # falta um item
-        {"despesas": [*despesas, {"componente_codigo": "INEXISTENTE", "valor": "1.00"}]},
-        {"despesas": [{**d, "valor": "0.00"} for d in despesas]},  # total zerado
+        {"valor": ...},
+        {"valor": "-10.00"},
+        {"valor": "100.123"},
         {"numero_fatura": ...},
         {"numero_fatura": ""},
         {"numero_fatura": "   "},
         {"numero_fatura": "X" * 61},
     ]
     for campos in invalidos:
-        r = _fechar(client, pcm, imp, **campos)
+        r = _fechar_item(client, pcm, imp, codigo, **campos)
         assert r.status_code == 422, (campos, r.text)
     detalhe = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
     assert detalhe["status"] == "CALCULADO"
-    assert detalhe["valor_fatura"] is None
     assert detalhe["despesas_fechadas"] == []
 
 
-def test_item_faltante_informa_qual(client, pcm, payload):
+def test_item_fora_da_despesa(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
-    r = _fechar(client, pcm, imp, despesas=_despesas(imp)[1:])
+    r = _fechar_item(client, pcm, imp, "INEXISTENTE")
+    assert r.status_code == 404
+    assert "não faz parte da despesa" in r.json()["detail"]
+    # itens da base de cálculo (CIF) não compõem a despesa
+    base = [i for i in imp["calculo_vigente"]["itens"] if not i["compoe_provisao"]]
+    if base:
+        assert _fechar_item(client, pcm, imp, base[0]["componente_codigo"]).status_code == 404
+
+
+def test_item_ja_fechado(client, pcm, payload):
+    imp = _calculado(client, pcm, payload)
+    item = _itens_despesa(imp)[0]
+    parcial = _fechar_item(client, pcm, imp, item["componente_codigo"]).json()
+    r = _fechar_item(client, pcm, parcial, item["componente_codigo"], numero_fatura="FT-OUTRA")
     assert r.status_code == 422
-    nome = _itens_despesa(imp)[0]["componente_nome"]
-    assert f"Informe o valor de {nome}" in r.json()["problemas"]
+    assert f"{item['componente_nome']} já está fechada" in r.json()["detail"]
 
 
 def test_rascunho_nao_fecha(client, pcm, payload):
     imp = _criar(client, pcm, payload)
-    r = _fechar(client, pcm, imp, despesas=[{"componente_codigo": "II", "valor": "1.00"}])
+    r = _fechar_item(client, pcm, imp, "II")
     assert r.status_code == 422
     assert "Calcule o processo" in r.json()["detail"]
 
@@ -159,7 +206,7 @@ def test_recalculo_pendente_nao_fecha(client, pcm, payload):
     r = client.put(f"/api/v1/importacoes/{imp['id']}", json=alterado, headers=pcm)
     assert r.status_code == 200, r.text
     assert r.json()["calculo_desatualizado"] is True
-    r = _fechar(client, pcm, r.json())
+    r = _fechar_item(client, pcm, r.json(), _itens_despesa(imp)[0]["componente_codigo"])
     assert r.status_code == 422
     assert "Recalcule o processo" in r.json()["detail"]
 
@@ -172,54 +219,74 @@ def test_cancelado_nao_fecha(client, pcm, payload):
         headers=pcm,
     )
     assert r.status_code == 200, r.text
-    assert _fechar(client, pcm, r.json()).status_code == 422
+    assert (
+        _fechar_item(client, pcm, r.json(), _itens_despesa(imp)[0]["componente_codigo"]).status_code
+        == 422
+    )
 
 
 def test_versao_desatualizada(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
-    r = _fechar(client, pcm, imp, versao=imp["versao"] + 50)
+    itens = _itens_despesa(imp)
+    r = _fechar_item(client, pcm, imp, itens[0]["componente_codigo"], versao=imp["versao"] + 50)
     assert r.status_code == 409
     assert "Recarregue" in r.json()["detail"]
+    # fechar um item muda a versão: quem estava com a versão anterior precisa recarregar
+    assert _fechar_item(client, pcm, imp, itens[0]["componente_codigo"]).status_code == 200
+    assert _fechar_item(client, pcm, imp, itens[1]["componente_codigo"]).status_code == 409
 
 
 def test_financeiro_nao_fecha(client, pcm, financeiro, payload):
     imp = _calculado(client, pcm, payload)
-    assert _fechar(client, financeiro, imp).status_code == 403
-    assert client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()["status"] == (
-        "CALCULADO"
+    codigo = _itens_despesa(imp)[0]["componente_codigo"]
+    assert _fechar_item(client, financeiro, imp, codigo).status_code == 403
+    assert (
+        client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()["despesas_fechadas"]
+        == []
     )
+
+
+def _bloqueios(client, headers, imp, payload, palavra):
+    alterado = {**payload, "observacoes": "tentativa", "versao": imp["versao"]}
+    r = client.put(f"/api/v1/importacoes/{imp['id']}", json=alterado, headers=headers)
+    assert r.status_code == 422
+    assert palavra in r.json()["detail"]
+
+    r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=headers)
+    assert r.status_code == 422
+    assert palavra in r.json()["detail"]
+    r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos/previa", headers=headers)
+    assert r.status_code == 422
+
+    r = client.post(
+        f"/api/v1/importacoes/{imp['id']}/cancelar",
+        json={"motivo": "Tentativa de cancelar"},
+        headers=headers,
+    )
+    assert r.status_code == 422
+    assert palavra in r.json()["detail"]
+
+    final = client.get(f"/api/v1/importacoes/{imp['id']}", headers=headers).json()
+    assert final["observacoes"] is None
+    assert final["calculo_vigente"]["numero_versao"] == 1
+    return final
+
+
+def test_despesa_parcial_nao_edita_nao_recalcula_nem_cancela(client, pcm, payload):
+    imp = _calculado(client, pcm, payload)
+    parcial = _fechar_item(client, pcm, imp, _itens_despesa(imp)[0]["componente_codigo"]).json()
+    final = _bloqueios(client, pcm, parcial, payload, "despesa fechada")
+    assert final["status"] == "CALCULADO"
 
 
 def test_fechado_nao_edita_nao_recalcula_nem_cancela(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
-    fechado = _fechar(client, pcm, imp).json()
-
-    r = _fechar(client, pcm, fechado)
+    fechado = _fechar_tudo(client, pcm, imp)
+    r = _fechar_item(client, pcm, fechado, _itens_despesa(imp)[0]["componente_codigo"])
     assert r.status_code == 422
     assert "já está fechada" in r.json()["detail"]
-
-    alterado = {**payload, "observacoes": "tentativa", "versao": fechado["versao"]}
-    r = client.put(f"/api/v1/importacoes/{imp['id']}", json=alterado, headers=pcm)
-    assert r.status_code == 422
-    assert "fechado" in r.json()["detail"]
-
-    r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos", json={}, headers=pcm)
-    assert r.status_code == 422
-    assert "fechado" in r.json()["detail"]
-    r = client.post(f"/api/v1/importacoes/{imp['id']}/calculos/previa", headers=pcm)
-    assert r.status_code == 422
-
-    r = client.post(
-        f"/api/v1/importacoes/{imp['id']}/cancelar", json={"motivo": "Tentativa de cancelar"},
-        headers=pcm,
-    )
-    assert r.status_code == 422
-    assert "fechado" in r.json()["detail"]
-
-    final = client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()
+    final = _bloqueios(client, pcm, fechado, payload, "fechado")
     assert final["status"] == "FECHADO"
-    assert final["observacoes"] is None
-    assert final["calculo_vigente"]["numero_versao"] == 1
 
 
 def test_provisao_nao_muda_e_filtro_de_status(client, pcm, financeiro, payload):
@@ -228,7 +295,7 @@ def test_provisao_nao_muda_e_filtro_de_status(client, pcm, financeiro, payload):
     antes = client.get("/api/v1/provisoes/mensal", params=params, headers=financeiro).json()
     assert Decimal(antes["total"]) > 0
 
-    assert _fechar(client, pcm, imp).status_code == 200
+    _fechar_tudo(client, pcm, imp)
     depois = client.get("/api/v1/provisoes/mensal", params=params, headers=financeiro).json()
     assert depois["total"] == antes["total"]
     por_processo = client.get(
@@ -236,18 +303,16 @@ def test_provisao_nao_muda_e_filtro_de_status(client, pcm, financeiro, payload):
     ).json()
     assert imp["numero_processo"] in {ln["rotulo"] for ln in por_processo["linhas"]}
 
-    r = client.get(
-        "/api/v1/importacoes", params={"status": "FECHADO", "tamanho": 200}, headers=pcm
-    )
+    r = client.get("/api/v1/importacoes", params={"status": "FECHADO", "tamanho": 200}, headers=pcm)
     assert r.status_code == 200
     ids = {i["id"] for i in r.json()["itens"]}
     assert imp["id"] in ids
     assert {i["status"] for i in r.json()["itens"]} == {"FECHADO"}
 
 
-def test_auditoria_registra_fechamento(client, pcm, admin, payload):
+def test_auditoria_registra_fechamentos(client, pcm, admin, payload):
     imp = _calculado(client, pcm, payload)
-    assert _fechar(client, pcm, imp).status_code == 200
+    _fechar_tudo(client, pcm, imp)
     r = client.get(
         "/api/v1/auditoria",
         params={"tabela": "importacao", "registro_id": imp["id"]},
@@ -256,25 +321,30 @@ def test_auditoria_registra_fechamento(client, pcm, admin, payload):
     ultimo = r["itens"][0]
     assert ultimo["acao"] == "UPDATE"
     assert ultimo["usuario_nome"] == "Analista PCM"
-    assert {
-        "status",
-        "valor_fatura",
-        "numero_fatura",
-        "fechado_em",
-        "fechado_por",
-    } <= set(ultimo["campos_alterados"])
+    assert {"status", "valor_fatura", "fechado_em", "fechado_por"} <= set(
+        ultimo["campos_alterados"]
+    )
+    # cada item fechado fica registrado na própria tabela, com o usuário que fechou
+    with SessionLocal() as db:
+        linhas = db.execute(
+            text(
+                "SELECT dados_depois ->> 'numero_fatura', usuario_id IS NOT NULL FROM auditoria "
+                "WHERE tabela = 'importacao_despesa' AND acao = 'INSERT' "
+                "AND dados_depois ->> 'importacao_id' = :id"
+            ),
+            {"id": imp["id"]},
+        ).all()
+    assert {numero for numero, _ in linhas} == {
+        f"FT-{i['componente_codigo']}" for i in _itens_despesa(imp)
+    }
+    assert all(com_usuario for _, com_usuario in linhas)
 
 
-def test_constraint_recusa_fechado_sem_fatura(client, pcm, payload):
+def test_constraints(client, pcm, payload):
     imp = _calculado(client, pcm, payload)
     sqls = [
         "UPDATE importacao SET status = 'FECHADO' WHERE id = :id",
-        "UPDATE importacao SET status = 'FECHADO', valor_fatura = 0, numero_fatura = 'FT-1' "
-        "WHERE id = :id",
-        "UPDATE importacao SET status = 'FECHADO', valor_fatura = 10, numero_fatura = '' "
-        "WHERE id = :id",
-        "UPDATE importacao SET status = 'FECHADO', valor_fatura = 10 WHERE id = :id",
-        "UPDATE importacao SET status = 'FECHADO', numero_fatura = 'FT-1' WHERE id = :id",
+        "UPDATE importacao SET status = 'FECHADO', valor_fatura = 0 WHERE id = :id",
     ]
     for sql in sqls:
         with SessionLocal() as db:
@@ -282,6 +352,26 @@ def test_constraint_recusa_fechado_sem_fatura(client, pcm, payload):
                 db.execute(text(sql), {"id": imp["id"]})
                 db.commit()
             db.rollback()
+
+    item_id = imp["calculo_vigente"]["itens"][0]
+    with SessionLocal() as db:
+        calculo_item = db.execute(
+            text(
+                "SELECT ci.id FROM calculo_item ci JOIN calculo c ON c.id = ci.calculo_id "
+                "WHERE c.importacao_id = :id AND ci.componente_codigo = :codigo"
+            ),
+            {"id": imp["id"], "codigo": item_id["componente_codigo"]},
+        ).scalar_one()
+        with pytest.raises(IntegrityError, match="ck_importacao_despesa_fatura"):
+            db.execute(
+                text(
+                    "INSERT INTO importacao_despesa (id, importacao_id, calculo_item_id, valor, "
+                    "numero_fatura) VALUES (gen_random_uuid(), :id, :item, 1, '')"
+                ),
+                {"id": imp["id"], "item": calculo_item},
+            )
+            db.commit()
+        db.rollback()
     assert client.get(f"/api/v1/importacoes/{imp['id']}", headers=pcm).json()["status"] == (
         "CALCULADO"
     )

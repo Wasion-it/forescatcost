@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
-from decimal import Decimal
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +20,7 @@ from app.models import (
 )
 from app.modules.importacoes.schemas import (
     DespesaFechada,
-    FechamentoDespesa,
+    FechamentoItem,
     ImportacaoAtualizacao,
     ImportacaoEntrada,
 )
@@ -84,11 +83,23 @@ def obter(db: Session, importacao_id: uuid.UUID) -> Importacao:
 MSG_CONFLITO = "Outra pessoa alterou este processo. Recarregue a página para ver a versão atual."
 
 
+def tem_despesa_fechada(db: Session, imp: Importacao) -> bool:
+    """Algum item da despesa já foi fechado (o cálculo vigente fica congelado)."""
+    return (
+        db.scalar(
+            select(ImportacaoDespesa.id).where(ImportacaoDespesa.importacao_id == imp.id).limit(1)
+        )
+        is not None
+    )
+
+
 def atualizar(db: Session, imp: Importacao, dados: ImportacaoAtualizacao) -> Importacao:
     if imp.status == "CANCELADO":
         raise ErroNegocio("Processo cancelado não pode ser editado")
     if imp.status == "FECHADO":
         raise ErroNegocio("Processo fechado não pode ser editado")
+    if tem_despesa_fechada(db, imp):
+        raise ErroNegocio("Processo com despesa fechada não pode ser editado")
     if dados.versao != imp.versao:
         raise ErroNegocio(MSG_CONFLITO, status=409)
     _validar_referencias(db, dados)
@@ -108,13 +119,22 @@ def cancelar(db: Session, imp: Importacao, motivo: str) -> Importacao:
         raise ErroNegocio("O processo já está cancelado")
     if imp.status == "FECHADO":
         raise ErroNegocio("Processo fechado não pode ser cancelado")
+    if tem_despesa_fechada(db, imp):
+        raise ErroNegocio("Processo com despesa fechada não pode ser cancelado")
     imp.status = "CANCELADO"
     imp.motivo_cancelamento = motivo.strip()
     db.flush()
     return imp
 
 
-def fechar(db: Session, imp: Importacao, dados: FechamentoDespesa, usuario: Usuario) -> Importacao:
+def fechar_item(
+    db: Session,
+    imp: Importacao,
+    componente_codigo: str,
+    dados: FechamentoItem,
+    usuario: Usuario,
+) -> Importacao:
+    """Fecha um item da despesa com a fatura dele. O processo fecha junto com o último item."""
     if dados.versao != imp.versao:
         raise ErroNegocio(MSG_CONFLITO, status=409)
     if imp.status == "FECHADO":
@@ -131,37 +151,52 @@ def fechar(db: Session, imp: Importacao, dados: FechamentoDespesa, usuario: Usua
     if vigente is None:
         raise ErroNegocio("Calcule o processo antes de fechar a despesa")
     itens = {i.componente_codigo: i for i in vigente.itens if i.compoe_provisao}
-    informados = {d.componente_codigo: d.valor for d in dados.despesas}
-    desconhecidos = sorted(set(informados) - set(itens))
-    faltantes = [i.componente_nome for c, i in itens.items() if c not in informados]
-    if desconhecidos or faltantes:
-        problemas = [f"Informe o valor de {nome}" for nome in faltantes]
-        problemas += [
-            f"Item {codigo} não faz parte da despesa deste processo" for codigo in desconhecidos
-        ]
-        raise ErroNegocio("Informe o valor realizado de cada item da despesa", problemas=problemas)
-    total = sum(informados.values(), Decimal(0))
-    if total <= 0:
-        raise ErroNegocio("O total da despesa deve ser maior que zero")
-    for codigo, item in itens.items():
-        db.add(
-            ImportacaoDespesa(
-                importacao_id=imp.id, calculo_item_id=item.id, valor=informados[codigo]
-            )
+    item = itens.get(componente_codigo)
+    if item is None:
+        raise ErroNegocio(
+            f"Item {componente_codigo} não faz parte da despesa deste processo", status=404
         )
-    imp.valor_fatura = total
-    imp.numero_fatura = dados.numero_fatura
-    imp.status = "FECHADO"
-    imp.fechado_em = datetime.now(UTC)
-    imp.fechador = usuario  # grava fechado_por e mantém fechado_por_nome atualizado
-    db.flush()
+    fechados = {
+        d.calculo_item_id: d
+        for d in db.scalars(
+            select(ImportacaoDespesa).where(ImportacaoDespesa.importacao_id == imp.id)
+        )
+    }
+    if item.id in fechados:
+        raise ErroNegocio(f"A despesa {item.componente_nome} já está fechada")
+
+    ultimo = all(i.id in fechados for i in itens.values() if i.id != item.id)
+    agora = datetime.now(UTC)
+    if ultimo:
+        total = sum((d.valor for d in fechados.values()), dados.valor)
+        if total <= 0:
+            raise ErroNegocio("O total da despesa deve ser maior que zero")
+        imp.valor_fatura = total
+        imp.status = "FECHADO"
+        imp.fechado_em = agora
+        imp.fechador = usuario  # grava fechado_por e mantém fechado_por_nome atualizado
+    else:
+        # Incrementa a versão do processo: o fechamento concorre com edições e outros fechamentos
+        imp.atualizado_em = agora
+    db.add(
+        ImportacaoDespesa(
+            importacao_id=imp.id,
+            calculo_item_id=item.id,
+            valor=dados.valor,
+            numero_fatura=dados.numero_fatura,
+            fechado_por=usuario.id,
+            criado_em=agora,
+        )
+    )
+    try:
+        db.flush()
+    except IntegrityError as exc:  # outro fechamento do mesmo item no mesmo instante
+        raise ErroNegocio(MSG_CONFLITO, status=409) from exc
     return imp
 
 
 def despesas_fechadas(db: Session, imp: Importacao) -> list[DespesaFechada]:
-    """Valores realizados por item, na ordem do cálculo (vazio se não fechada item a item)."""
-    if imp.status != "FECHADO":
-        return []
+    """Itens da despesa já fechados, com valor realizado e fatura, na ordem do cálculo."""
     linhas = db.scalars(
         select(ImportacaoDespesa).where(ImportacaoDespesa.importacao_id == imp.id)
     ).all()
@@ -173,6 +208,9 @@ def despesas_fechadas(db: Session, imp: Importacao) -> list[DespesaFechada]:
             ordem=d.item.ordem,
             provisionado=d.item.valor,
             valor=d.valor,
+            numero_fatura=d.numero_fatura,
+            fechado_em=d.criado_em,
+            fechado_por_nome=d.fechador.nome if d.fechador else None,
         )
         for d in sorted(linhas, key=lambda d: d.item.ordem)
     ]
@@ -200,6 +238,7 @@ def consulta_lista(
         consulta = consulta.where(
             or_(
                 Importacao.numero_ip.ilike(termo),
+                Importacao.numero_invoice.ilike(termo),
                 Importacao.observacoes.ilike(termo),
                 *filtro_numero,
             )

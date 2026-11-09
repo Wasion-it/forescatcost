@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.calculo.engine import Entradas, ResultadoCalculo, calcular
 from app.core.erros import ErroNegocio
-from app.models import Calculo, CalculoItem, ComponenteCusto, Importacao, Usuario
+from app.models import (
+    Calculo,
+    CalculoItem,
+    ComponenteCusto,
+    Importacao,
+    ImportacaoDespesa,
+    Usuario,
+)
 from app.modules.parametros.service import (
     ParametroResolvido,
     carregar_componentes,
@@ -61,6 +68,12 @@ def executar(db: Session, imp: Importacao, data_parametros: date | None = None) 
         raise ErroNegocio("Processo cancelado não pode ser calculado")
     if imp.status == "FECHADO":
         raise ErroNegocio("Processo fechado não pode ser calculado")
+    tem_despesa_fechada = db.scalar(
+        select(ImportacaoDespesa.id).where(ImportacaoDespesa.importacao_id == imp.id).limit(1)
+    )
+    if tem_despesa_fechada is not None:
+        # O fechamento aponta para os itens do cálculo vigente; um novo cálculo os substituiria
+        raise ErroNegocio("Processo com despesa fechada não pode ser calculado")
     data_parametros = data_parametros or date.today()
     entradas = entradas_de(imp)
     pares = carregar_componentes(db, data_parametros)
@@ -159,7 +172,7 @@ def previa(db: Session, imp: Importacao) -> dict:
 
 def _snapshot_entradas(imp: Importacao, execucao: Execucao) -> dict:
     campos = [
-        "numero_ip", "data_ip", "data_prevista", "modal",
+        "numero_ip", "numero_invoice", "data_ip", "data_prevista", "modal",
         "valor_invoice", "moeda_invoice", "valor_frete", "moeda_frete", "qtd_itens",
         "qtd_containers", "taxa_usd", "taxa_cny", "valor_siscomex", "peso_bruto_kg",
         "peso_liquido_kg", "valor_armazenagem_aerea", "valor_taxa_liberacao",

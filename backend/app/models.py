@@ -236,14 +236,14 @@ class Importacao(Base):
             postgresql_where=text("numero_ip IS NOT NULL"),
         ),
         CheckConstraint(
-            "status <> 'FECHADO' OR (valor_fatura IS NOT NULL AND valor_fatura > 0 "
-            "AND numero_fatura IS NOT NULL AND numero_fatura <> '')",
+            "status <> 'FECHADO' OR (valor_fatura IS NOT NULL AND valor_fatura > 0)",
             name="ck_importacao_fechamento",
         ),
     )
     id: Mapped[uuid.UUID] = _uuid_pk()
     numero: Mapped[int] = mapped_column(Integer, Identity(start=1), unique=True)
     numero_ip: Mapped[str | None] = mapped_column(String(30))
+    numero_invoice: Mapped[str | None] = mapped_column(String(60))
     data_ip: Mapped[date | None] = mapped_column(Date)
     data_prevista: Mapped[date | None] = mapped_column(Date)
     tipo_importacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tipo_importacao.id"))
@@ -270,7 +270,9 @@ class Importacao(Base):
     status: Mapped[str] = mapped_column(String(20), default="RASCUNHO")
     calculo_desatualizado: Mapped[bool] = mapped_column(Boolean, default=False)
     motivo_cancelamento: Mapped[str | None] = mapped_column(String(300))
+    # Preenchidos quando o último item da despesa é fechado: total realizado, data e responsável
     valor_fatura: Mapped[Decimal | None] = mapped_column(Dinheiro)
+    # Só em processos fechados antes do fechamento por item (o número agora fica em cada item)
     numero_fatura: Mapped[str | None] = mapped_column(String(60))
     fechado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fechado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario.id"))
@@ -306,19 +308,23 @@ class Importacao(Base):
 
 
 class ImportacaoDespesa(Base):
-    """Valor realizado de cada item do cálculo, informado ao fechar a despesa do processo."""
+    """Fechamento de um item da despesa: valor realizado e fatura, informados quando ela chega."""
 
     __tablename__ = "importacao_despesa"
     __table_args__ = (
         UniqueConstraint("importacao_id", "calculo_item_id"),
         CheckConstraint("valor >= 0", name="ck_importacao_despesa_valor"),
+        CheckConstraint("numero_fatura <> ''", name="ck_importacao_despesa_fatura"),
     )
     id: Mapped[uuid.UUID] = _uuid_pk()
     importacao_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("importacao.id"))
     calculo_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("calculo_item.id"))
     valor: Mapped[Decimal] = mapped_column(Dinheiro)
-    criado_em: Mapped[datetime] = _criado_em()
+    numero_fatura: Mapped[str] = mapped_column(String(60))
+    fechado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario.id"))
+    criado_em: Mapped[datetime] = _criado_em()  # momento do fechamento do item
     item: Mapped[CalculoItem] = relationship(lazy="joined")
+    fechador: Mapped[Usuario | None] = relationship(lazy="joined")
 
 
 # --------------------------------------------------------------------------- Cálculo

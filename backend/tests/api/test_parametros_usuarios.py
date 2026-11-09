@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from decimal import Decimal
 
 
 def _param(client, headers, chave):
@@ -121,6 +122,16 @@ def test_aliquotas_e_componentes(client, pcm):
     comps = client.get("/api/v1/componentes", headers=pcm).json()
     assert comps[0]["codigo"] == "CIF"
     assert comps[0]["formula"]["expressao"] == "invoice_brl + frete_brl"
+
+
+def test_icms_so_em_uso_e_consumo(client, pcm):
+    a = client.get("/api/v1/aliquotas", headers=pcm).json()
+    ids = {t["id"]: t["codigo"] for t in a["tipos"]}
+    icms = next(ln for ln in a["linhas"] if ln["imposto"]["codigo"] == "ICMS")
+    vigente = {ids[tid]: Decimal(v["vigente"]["valor"]) for tid, v in icms["por_tipo"].items()}
+    assert vigente["ADICIONAR_ATIVO"] == 0
+    assert vigente["INDUSTRIALIZACAO"] == 0
+    assert vigente["USO_CONSUMO"] > 0
 
 
 def test_gestao_de_usuarios(client, admin, pcm):

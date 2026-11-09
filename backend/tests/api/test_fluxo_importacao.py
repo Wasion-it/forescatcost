@@ -196,6 +196,36 @@ def test_validacoes_de_entrada(client, pcm, payload):
     assert client.post("/api/v1/importacoes", json=so_prevista, headers=pcm).status_code == 201
 
 
+def test_numero_da_invoice_e_opcional_aparado_e_pesquisavel(client, pcm, payload):
+    com = {**payload, "numero_ip": f"IP-26-{next(_seq):04d}", "numero_invoice": "  INV-ZX-4471  "}
+    r = client.post("/api/v1/importacoes", json=com, headers=pcm)
+    assert r.status_code == 201
+    criado = r.json()
+    assert criado["numero_invoice"] == "INV-ZX-4471"
+
+    # a mesma invoice pode aparecer em outro processo (embarque parcial)
+    outro = {**com, "numero_ip": f"IP-26-{next(_seq):04d}"}
+    assert client.post("/api/v1/importacoes", json=outro, headers=pcm).status_code == 201
+
+    # a pesquisa da lista encontra pelo número da invoice e devolve o campo no resumo
+    lista = client.get("/api/v1/importacoes", params={"q": "ZX-4471"}, headers=pcm).json()
+    assert lista["total"] == 2
+    assert all(i["numero_invoice"] == "INV-ZX-4471" for i in lista["itens"])
+
+    # vazio vira nulo e o campo não é obrigatório
+    vazio = {**payload, "numero_ip": f"IP-26-{next(_seq):04d}", "numero_invoice": "   "}
+    r = client.post("/api/v1/importacoes", json=vazio, headers=pcm)
+    assert r.status_code == 201
+    assert r.json()["numero_invoice"] is None
+
+    # edição altera o número
+    atual = client.get(f"/api/v1/importacoes/{criado['id']}", headers=pcm).json()
+    corpo = {**com, "numero_invoice": "INV-ZX-9999", "versao": atual["versao"]}
+    r = client.put(f"/api/v1/importacoes/{criado['id']}", json=corpo, headers=pcm)
+    assert r.status_code == 200
+    assert r.json()["numero_invoice"] == "INV-ZX-9999"
+
+
 def test_ip_duplicada(client, pcm, payload):
     _criar(client, pcm, payload)
     r = client.post("/api/v1/importacoes", json=payload, headers=pcm)

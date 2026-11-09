@@ -63,7 +63,7 @@ export function ListaImportacoes() {
             <input
               id="f-q"
               className="entrada"
-              placeholder="IP, IMP-00012 ou observação"
+              placeholder="IP, invoice, IMP-00012 ou observação"
               value={rascunho.q}
               onChange={(e) => setRascunho({ ...rascunho, q: e.target.value })}
             />
@@ -141,6 +141,7 @@ export function ListaImportacoes() {
                   <tr>
                     <th scope="col">Processo</th>
                     <th scope="col">IP</th>
+                    <th scope="col">Invoice</th>
                     <th scope="col">Data</th>
                     <th scope="col">Tipo</th>
                     <th scope="col">Modal</th>
@@ -159,6 +160,7 @@ export function ListaImportacoes() {
                         </Link>
                       </td>
                       <td>{i.numero_ip ?? <span className="suave">IP não gerada</span>}</td>
+                      <td>{i.numero_invoice ?? <span className="suave">–</span>}</td>
                       <td>
                         {data(i.data_referencia)}
                         {!i.data_ip && <span className="suave"> (prevista)</span>}
@@ -176,7 +178,7 @@ export function ListaImportacoes() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={6}>Total desta página (sem cancelados)</td>
+                    <td colSpan={7}>Total desta página (sem cancelados)</td>
                     <td className="num valor-provisionado">
                       {brl(
                         consulta.data.itens
